@@ -87,7 +87,8 @@ interface DBState {
   addActivityLog: (params: Omit<ActivityLog, 'id' | 'created_at'>) => Promise<void>;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = rawApiUrl.replace(/\/$/, '');
 
 const fetchJSON = async (url: string, options?: RequestInit) => {
   const res = await fetch(url, options);
