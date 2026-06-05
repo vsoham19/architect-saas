@@ -7,7 +7,7 @@ export const getNotifications = async (req, res, next) => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -23,7 +23,7 @@ export const createNotification = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -40,7 +40,7 @@ export const markNotificationRead = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -56,7 +56,7 @@ export const markAllNotificationsRead = async (req, res, next) => {
       .eq('recipient_id', userId)
       .select();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);

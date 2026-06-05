@@ -6,7 +6,7 @@ export const getDocuments = async (req, res, next) => {
     const { data, error } = await supabase
       .from('documents')
       .select('*');
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -21,7 +21,7 @@ export const createDocument = async (req, res, next) => {
       .insert({ id, project_id, title, doc_type, created_by })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -38,7 +38,7 @@ export const updateDocumentVersion = async (req, res, next) => {
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -51,7 +51,7 @@ export const getDocVersions = async (req, res, next) => {
     const { data, error } = await supabase
       .from('doc_versions')
       .select('*');
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -66,7 +66,7 @@ export const createDocVersion = async (req, res, next) => {
       .insert({ id, document_id, revision_number, file_url, file_size, change_summary, created_by })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -79,7 +79,7 @@ export const getDocReviews = async (req, res, next) => {
     const { data, error } = await supabase
       .from('doc_reviews')
       .select('*');
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -94,7 +94,7 @@ export const createDocReview = async (req, res, next) => {
       .insert({ id, document_id, version_id, reviewer_id, status, comment })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -107,7 +107,7 @@ export const getDocApprovals = async (req, res, next) => {
     const { data, error } = await supabase
       .from('doc_approvals')
       .select('*');
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -122,7 +122,7 @@ export const createDocApproval = async (req, res, next) => {
       .insert({ id, document_id, version_id, approved_by, tagging_confirmed, no_tasks_affected })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -135,7 +135,7 @@ export const getApprovalTaskTags = async (req, res, next) => {
     const { data, error } = await supabase
       .from('approval_task_tags')
       .select('*');
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -149,7 +149,7 @@ export const createApprovalTaskTags = async (req, res, next) => {
       .from('approval_task_tags')
       .insert(tags)
       .select();
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);

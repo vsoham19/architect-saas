@@ -7,7 +7,7 @@ export const getProjects = async (req, res, next) => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -23,7 +23,7 @@ export const createProject = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -41,7 +41,7 @@ export const updateProjectStatus = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -54,7 +54,7 @@ export const getProjectMembers = async (req, res, next) => {
       .from('project_members')
       .select('*');
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -71,7 +71,7 @@ export const assignProjectMembers = async (req, res, next) => {
       .delete()
       .eq('project_id', projectId);
 
-    if (deleteError) throw deleteError;
+    if (deleteError) throw new Error(deleteError.message || JSON.stringify(deleteError));
 
     if (members && members.length > 0) {
       const insertRows = members.map(m => ({
@@ -85,7 +85,7 @@ export const assignProjectMembers = async (req, res, next) => {
         .insert(insertRows)
         .select();
 
-      if (error) throw error;
+      if (error) throw new Error(error.message || JSON.stringify(error));
       res.status(200).json({ status: "success", data });
     } else {
       res.status(200).json({ status: "success", data: [] });

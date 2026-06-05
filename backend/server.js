@@ -1,17 +1,61 @@
-import express from "express";
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { errorHandler } from './src/middleware/error.js';
+
+import userRoutes from './src/routes/userRoutes.js';
+import projectRoutes from './src/routes/projectRoutes.js';
+import taskRoutes from './src/routes/taskRoutes.js';
+import documentRoutes from './src/routes/documentRoutes.js';
+import notificationRoutes from './src/routes/notificationRoutes.js';
+import auditRoutes from './src/routes/auditRoutes.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load dotenv relative to the directory of this file (looks for .env at backend/.env)
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-app.get("/", (req, res) => {
-  res.json({
+// Enable CORS
+app.use(cors({
+  origin: '*', // Allow all origins for dev/testing, customize in production
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
+}));
+
+app.use(express.json());
+
+// Base health routes
+app.get('/', (req, res) => {
+  res.status(200).json({
     status: "ok",
-    message: "Server working"
+    message: "Backend running successfully"
   });
 });
 
-// TEST ONLY ONE IMPORT
-import userRoutes from "./src/routes/userRoutes.js";
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    message: "Backend running successfully"
+  });
+});
 
-app.use("/api/users", userRoutes);
+// Domain routes
+app.use('/api/users', userRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/audit-logs', auditRoutes);
 
-export default app;
+// Error Handling Middleware
+app.use(errorHandler);
+
+app.listen(PORT, () => {
+  console.log(`SaaS ERP Backend server running on port ${PORT}`);
+});

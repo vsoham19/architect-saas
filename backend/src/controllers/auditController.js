@@ -7,7 +7,7 @@ export const getAuditLogs = async (req, res, next) => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -23,7 +23,7 @@ export const createAuditLog = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);

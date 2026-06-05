@@ -7,7 +7,7 @@ export const getUsers = async (req, res, next) => {
       .select('*')
       .order('full_name', { ascending: true });
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -23,7 +23,7 @@ export const createUser = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);

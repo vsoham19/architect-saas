@@ -7,7 +7,7 @@ export const getTasks = async (req, res, next) => {
       .select('*')
       .order('created_at', { ascending: true });
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -23,7 +23,7 @@ export const createTask = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(201).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -47,7 +47,7 @@ export const updateTaskStatus = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", data });
   } catch (err) {
     next(err);
@@ -62,7 +62,7 @@ export const deleteTask = async (req, res, next) => {
       .delete()
       .eq('id', id);
 
-    if (error) throw error;
+    if (error) throw new Error(error.message || JSON.stringify(error));
     res.status(200).json({ status: "success", message: "Task deleted successfully" });
   } catch (err) {
     next(err);
