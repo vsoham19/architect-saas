@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
 import {
   Project, Team, TeamMember, Task, Document, DocumentVersion,
   DocumentReview, DocumentApproval, ApprovalTaskTag, Notification,
@@ -87,6 +86,17 @@ interface DBState {
   addAuditLog: (params: Omit<AuditLog, 'id' | 'created_at'>) => Promise<void>;
   addActivityLog: (params: Omit<ActivityLog, 'id' | 'created_at'>) => Promise<void>;
 }
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+const fetchJSON = async (url: string, options?: RequestInit) => {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    throw new Error(`API error ${res.status} on ${url}`);
+  }
+  const body = await res.json();
+  return body.data;
+};
 
 // Client-side UUID generator to avoid dependency import issues
 const generateUUID = () => {
@@ -234,42 +244,42 @@ export const useDBStore = create<DBState>((set, get) => ({
     if (get().isInitialized) return;
 
     try {
-      // Parallel fetches from Supabase
+      // Parallel fetches from REST API
       const [
-        { data: dbProjects },
-        { data: dbMembers },
-        { data: dbTasks },
-        { data: dbDocs },
-        { data: dbVersions },
-        { data: dbReviews },
-        { data: dbApprovals },
-        { data: dbTags },
-        { data: dbNotifs },
-        { data: dbAudit }
+        dbProjects,
+        dbMembers,
+        dbTasks,
+        dbDocs,
+        dbVersions,
+        dbReviews,
+        dbApprovals,
+        dbTags,
+        dbNotifs,
+        dbAudit
       ] = await Promise.all([
-        supabase.from('projects').select('*'),
-        supabase.from('project_members').select('*'),
-        supabase.from('tasks').select('*'),
-        supabase.from('documents').select('*'),
-        supabase.from('doc_versions').select('*'),
-        supabase.from('doc_reviews').select('*'),
-        supabase.from('doc_approvals').select('*'),
-        supabase.from('approval_task_tags').select('*'),
-        supabase.from('notifications').select('*'),
-        supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(50)
+        fetchJSON(`${API_URL}/api/projects`),
+        fetchJSON(`${API_URL}/api/projects/members`),
+        fetchJSON(`${API_URL}/api/tasks`),
+        fetchJSON(`${API_URL}/api/documents`),
+        fetchJSON(`${API_URL}/api/documents/versions`),
+        fetchJSON(`${API_URL}/api/documents/reviews`),
+        fetchJSON(`${API_URL}/api/documents/approvals`),
+        fetchJSON(`${API_URL}/api/documents/tags`),
+        fetchJSON(`${API_URL}/api/notifications`),
+        fetchJSON(`${API_URL}/api/audit-logs`)
       ]);
 
-      const projects = (dbProjects || []).map(mapProject);
-      const teamMembers = (dbMembers || []).map(mapMember);
-      const tasks = (dbTasks || []).map(mapTask);
-      const documentVersions = (dbVersions || []).map(mapVersion);
-      const documentReviews = (dbReviews || []).map(mapReview);
-      const documentApprovals = (dbApprovals || []).map(mapApproval);
+      const projects: Project[] = (dbProjects || []).map(mapProject);
+      const teamMembers: TeamMember[] = (dbMembers || []).map(mapMember);
+      const tasks: Task[] = (dbTasks || []).map(mapTask);
+      const documentVersions: DocumentVersion[] = (dbVersions || []).map(mapVersion);
+      const documentReviews: DocumentReview[] = (dbReviews || []).map(mapReview);
+      const documentApprovals: DocumentApproval[] = (dbApprovals || []).map(mapApproval);
       
       // Compute document status based on reviews/approvals
-      const documents = (dbDocs || []).map(doc => {
-        const hasApproval = (dbApprovals || []).some(a => a.document_id === doc.id && a.version_id === doc.current_version_id);
-        const hasRejectedReview = (dbReviews || []).some(r => r.document_id === doc.id && r.version_id === doc.current_version_id && r.status === 'rejected');
+      const documents: Document[] = (dbDocs || []).map((doc: any) => {
+        const hasApproval = (dbApprovals || []).some((a: any) => a.document_id === doc.id && a.version_id === doc.current_version_id);
+        const hasRejectedReview = (dbReviews || []).some((r: any) => r.document_id === doc.id && r.version_id === doc.current_version_id && r.status === 'rejected');
         
         let status: DocumentStatus = 'pending_review';
         if (hasApproval) status = 'approved';
@@ -278,16 +288,16 @@ export const useDBStore = create<DBState>((set, get) => ({
         return mapDocument(doc, status);
       });
 
-      const approvalTaskTags = (dbTags || []).map(t => ({
+      const approvalTaskTags: ApprovalTaskTag[] = (dbTags || []).map((t: any) => ({
         id: t.id,
         approval_id: t.approval_id,
         task_id: t.task_id,
         created_at: t.created_at
       }));
 
-      const notifications = (dbNotifs || []).map(mapNotification);
-      const auditLogs = (dbAudit || []).map(mapAuditLog);
-      const activityLogs = (dbAudit || []).map(mapActivityLog);
+      const notifications: Notification[] = (dbNotifs || []).map(mapNotification);
+      const auditLogs: AuditLog[] = (dbAudit || []).map(mapAuditLog);
+      const activityLogs: ActivityLog[] = (dbAudit || []).map(mapActivityLog);
 
       // Generate teams list dynamically from projects to maintain type compatibility
       const teams: Team[] = projects.map(p => ({
@@ -313,7 +323,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         isInitialized: true
       });
     } catch (e) {
-      console.error("Failed to initialize database from Supabase", e);
+      console.error("Failed to initialize database from Backend", e);
       set({ isInitialized: true });
     }
   },
@@ -352,23 +362,28 @@ export const useDBStore = create<DBState>((set, get) => ({
       teamMembers: [...state.teamMembers, ...newMembers]
     }));
 
-    // Persist to Supabase
+    // Persist to Backend
     try {
-      await supabase.from('projects').insert({
-        id: newProjId,
-        name: params.name,
-        description: params.description,
-        status: params.status,
-        created_by: params.createdBy
+      await fetchJSON(`${API_URL}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newProjId,
+          name: params.name,
+          description: params.description,
+          status: params.status,
+          created_by: params.createdBy
+        })
       });
 
-      // Insert members
-      const insertMembers = params.assignedUsers.map(u => ({
-        project_id: newProjId,
-        user_id: u.userId,
-        project_role: u.role
-      }));
-      await supabase.from('project_members').insert(insertMembers);
+      await fetchJSON(`${API_URL}/api/projects/members/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: newProjId,
+          members: params.assignedUsers
+        })
+      });
 
       // Log activity
       get().addAuditLog({
@@ -379,7 +394,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         details: { name: params.name, team_name: params.teamName }
       });
     } catch (e) {
-      console.error("Failed to create project in Supabase", e);
+      console.error("Failed to create project in Backend", e);
     }
 
     return newProject;
@@ -393,9 +408,11 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('projects')
-        .update({ status })
-        .eq('id', projectId);
+      await fetchJSON(`${API_URL}/api/projects/${projectId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
 
       get().addAuditLog({
         user_id: userId,
@@ -405,7 +422,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         details: { status }
       });
     } catch (e) {
-      console.error("Failed to update project status in Supabase", e);
+      console.error("Failed to update project status in Backend", e);
     }
   },
 
@@ -426,16 +443,16 @@ export const useDBStore = create<DBState>((set, get) => ({
     });
 
     try {
-      // Tear down old members and re-insert
-      await supabase.from('project_members').delete().eq('project_id', projectId);
-      const insertMembers = members.map(u => ({
-        project_id: projectId,
-        user_id: u.userId,
-        project_role: u.role
-      }));
-      await supabase.from('project_members').insert(insertMembers);
+      await fetchJSON(`${API_URL}/api/projects/members/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          members
+        })
+      });
     } catch (e) {
-      console.error("Failed to update team members in Supabase", e);
+      console.error("Failed to update team members in Backend", e);
     }
   },
 
@@ -459,15 +476,19 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('tasks').insert({
-        id: newTaskId,
-        project_id: params.projectId,
-        assigned_to: params.assignedJuniorId,
-        assigned_by: params.assignedSeniorId,
-        title: params.title,
-        description: params.description,
-        status: 'pending',
-        due_date: params.dueDate
+      await fetchJSON(`${API_URL}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newTaskId,
+          project_id: params.projectId,
+          assigned_to: params.assignedJuniorId,
+          assigned_by: params.assignedSeniorId,
+          title: params.title,
+          description: params.description,
+          status: 'pending',
+          due_date: params.dueDate
+        })
       });
 
       if (params.assignedJuniorId) {
@@ -481,7 +502,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         });
       }
     } catch (e) {
-      console.error("Failed to create task in Supabase", e);
+      console.error("Failed to create task in Backend", e);
     }
 
     return newTask;
@@ -507,9 +528,11 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('tasks')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('id', taskId);
+      await fetchJSON(`${API_URL}/api/tasks/${taskId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
 
       // Handle notification flows
       if (status === 'review' && userId === assignedJunior) {
@@ -534,7 +557,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         });
       }
     } catch (e) {
-      console.error("Failed to update task status in Supabase", e);
+      console.error("Failed to update task status in Backend", e);
     }
   },
 
@@ -547,9 +570,11 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('tasks').delete().eq('id', taskId);
+      await fetchJSON(`${API_URL}/api/tasks/${taskId}`, {
+        method: 'DELETE'
+      });
     } catch (e) {
-      console.error("Failed to delete task from Supabase", e);
+      console.error("Failed to delete task from Backend", e);
     }
   },
 
@@ -610,31 +635,40 @@ export const useDBStore = create<DBState>((set, get) => ({
     try {
       if (revisionNumber === 1) {
         // Create document
-        await supabase.from('documents').insert({
-          id: docId,
-          project_id: params.projectId,
-          title: params.documentName,
-          doc_type: params.documentName.toLowerCase().endsWith('.dwg') ? 'dwg' : 'pdf',
-          created_by: params.uploadedBy,
-          current_version_id: null
+        await fetchJSON(`${API_URL}/api/documents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: docId,
+            project_id: params.projectId,
+            title: params.documentName,
+            doc_type: params.documentName.toLowerCase().endsWith('.dwg') ? 'dwg' : 'pdf',
+            created_by: params.uploadedBy
+          })
         });
       }
 
       // Create version
-      await supabase.from('doc_versions').insert({
-        id: verId,
-        document_id: docId,
-        revision_number: revisionNumber,
-        file_url: params.fileUrl,
-        file_size: params.fileSize,
-        change_summary: params.changelog,
-        created_by: params.uploadedBy
+      await fetchJSON(`${API_URL}/api/documents/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: verId,
+          document_id: docId,
+          revision_number: revisionNumber,
+          file_url: params.fileUrl,
+          file_size: params.fileSize,
+          change_summary: params.changelog,
+          created_by: params.uploadedBy
+        })
       });
 
       // Update current version
-      await supabase.from('documents')
-        .update({ current_version_id: verId })
-        .eq('id', docId);
+      await fetchJSON(`${API_URL}/api/documents/${docId}/version`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_version_id: verId })
+      });
 
       // Notify project leads
       const members = get().teamMembers.filter(tm => tm.team_id === `team-${params.projectId}`);
@@ -651,7 +685,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         }
       });
     } catch (e) {
-      console.error("Failed to upload document version to Supabase", e);
+      console.error("Failed to upload document version to Backend", e);
     }
 
     return { doc, ver: newVersion };
@@ -704,13 +738,17 @@ export const useDBStore = create<DBState>((set, get) => ({
 
     try {
       if (document) {
-        await supabase.from('doc_reviews').insert({
-          id: reviewId,
-          document_id: document.id,
-          version_id: params.versionId,
-          reviewer_id: params.reviewerId,
-          status: newProposals.length > 0 ? 'rejected' : 'approved',
-          comment: commentPayload
+        await fetchJSON(`${API_URL}/api/documents/reviews`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: reviewId,
+            document_id: document.id,
+            version_id: params.versionId,
+            reviewer_id: params.reviewerId,
+            status: newProposals.length > 0 ? 'rejected' : 'approved',
+            comment: commentPayload
+          })
         });
 
         // Notify uploader
@@ -726,7 +764,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         }
       }
     } catch (e) {
-      console.error("Failed to add review in Supabase", e);
+      console.error("Failed to add review in Backend", e);
     }
 
     return newReview;
@@ -777,13 +815,17 @@ export const useDBStore = create<DBState>((set, get) => ({
 
     try {
       // Insert approval
-      await supabase.from('doc_approvals').insert({
-        id: approvalId,
-        document_id: docId,
-        version_id: params.versionId,
-        approved_by: params.approverId,
-        tagging_confirmed: params.taggedTaskIds.length > 0,
-        no_tasks_affected: params.confirmNoTasks
+      await fetchJSON(`${API_URL}/api/documents/approvals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: approvalId,
+          document_id: docId,
+          version_id: params.versionId,
+          approved_by: params.approverId,
+          tagging_confirmed: params.taggedTaskIds.length > 0,
+          no_tasks_affected: params.confirmNoTasks
+        })
       });
 
       // Insert tag joins
@@ -793,13 +835,19 @@ export const useDBStore = create<DBState>((set, get) => ({
           task_id: tid,
           tagged_by: params.approverId
         }));
-        await supabase.from('approval_task_tags').insert(insertTags);
+        await fetchJSON(`${API_URL}/api/documents/tags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(insertTags)
+        });
 
         // Update tasks in DB
         await Promise.all(params.taggedTaskIds.map(tid => 
-          supabase.from('tasks')
-            .update({ status: 'review', updated_at: new Date().toISOString() })
-            .eq('id', tid)
+          fetchJSON(`${API_URL}/api/tasks/${tid}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'review' })
+          })
         ));
       }
 
@@ -818,7 +866,7 @@ export const useDBStore = create<DBState>((set, get) => ({
         }
       });
     } catch (e) {
-      console.error("Failed to approve document in Supabase", e);
+      console.error("Failed to approve document in Backend", e);
     }
 
     return approval;
@@ -843,17 +891,21 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('notifications').insert({
-        id: newId,
-        recipient_id: params.user_id,
-        type: params.type,
-        message: params.message,
-        is_read: false,
-        approval_id: params.metadata?.approval_id || null,
-        task_id: params.metadata?.task_id || null
+      await fetchJSON(`${API_URL}/api/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newId,
+          recipient_id: params.user_id,
+          type: params.type,
+          message: params.message,
+          is_read: false,
+          approval_id: params.metadata?.approval_id || null,
+          task_id: params.metadata?.task_id || null
+        })
       });
     } catch (e) {
-      console.error("Failed to insert notification into Supabase", e);
+      console.error("Failed to insert notification into Backend", e);
     }
   },
 
@@ -865,11 +917,11 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('notifications')
-        .update({ is_read: true })
-        .eq('id', notificationId);
+      await fetchJSON(`${API_URL}/api/notifications/${notificationId}/read`, {
+        method: 'PATCH'
+      });
     } catch (e) {
-      console.error("Failed to mark notification read in Supabase", e);
+      console.error("Failed to mark notification read in Backend", e);
     }
   },
 
@@ -881,11 +933,13 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('notifications')
-        .update({ is_read: true })
-        .eq('recipient_id', userId);
+      await fetchJSON(`${API_URL}/api/notifications/read-all`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
     } catch (e) {
-      console.error("Failed to mark all notifications read in Supabase", e);
+      console.error("Failed to mark all notifications read in Backend", e);
     }
   },
 
@@ -906,16 +960,20 @@ export const useDBStore = create<DBState>((set, get) => ({
     }));
 
     try {
-      await supabase.from('audit_log').insert({
-        id: newId,
-        actor_id: params.user_id,
-        action: params.action,
-        entity_type: params.entity_type,
-        entity_id: params.entity_id || null,
-        payload: params.details
+      await fetchJSON(`${API_URL}/api/audit-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newId,
+          actor_id: params.user_id,
+          action: params.action,
+          entity_type: params.entity_type,
+          entity_id: params.entity_id || null,
+          payload: params.details
+        })
       });
     } catch (e) {
-      console.error("Failed to write audit log to Supabase", e);
+      console.error("Failed to write audit log to Backend", e);
     }
   },
 
@@ -934,18 +992,21 @@ export const useDBStore = create<DBState>((set, get) => ({
       activityLogs: [newLog, ...state.activityLogs]
     }));
 
-    // Save as audit log in DB to keep lightweight schema
     try {
-      await supabase.from('audit_log').insert({
-        id: newId,
-        actor_id: params.user_id,
-        action: params.action,
-        entity_type: 'activity',
-        entity_id: params.project_id || null,
-        payload: { details: params.details }
+      await fetchJSON(`${API_URL}/api/audit-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newId,
+          actor_id: params.user_id,
+          action: params.action,
+          entity_type: 'activity',
+          entity_id: params.project_id || null,
+          payload: { details: params.details }
+        })
       });
     } catch (e) {
-      console.error("Failed to write activity log to Supabase", e);
+      console.error("Failed to write activity log to Backend", e);
     }
   }
 }));

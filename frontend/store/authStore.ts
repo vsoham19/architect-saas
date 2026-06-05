@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { User, UserRole } from '../types';
-import { supabase } from '../lib/supabase';
 
 interface AuthState {
   currentUser: User | null;
@@ -13,6 +12,8 @@ interface AuthState {
   switchRole: (role: UserRole) => void;
   initialize: () => Promise<void>;
 }
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 const mapDbUser = (dbUser: any): User => ({
   id: dbUser.id,
@@ -42,14 +43,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const cleanEmail = email.trim().toLowerCase();
       if (!cleanEmail) return false;
 
-      // 1. Check if user already exists in Supabase users table
-      const { data: dbUser, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', cleanEmail)
-        .maybeSingle();
+      // 1. Fetch all users to see if user already exists
+      const res = await fetch(`${API_URL}/api/users`);
+      if (!res.ok) throw new Error('Failed to fetch users');
+      const { data: dbUsers } = await res.json();
+      const dbUser = dbUsers?.find((u: any) => u.email === cleanEmail);
 
-      if (dbUser && !error) {
+      if (dbUser) {
         const user = mapDbUser(dbUser);
         set((state) => {
           const exists = state.allUsers.some(u => u.id === user.id);
@@ -80,11 +80,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         avatar_url: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150` // default user icon
       };
 
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert(newUser);
+      const insertRes = await fetch(`${API_URL}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser)
+      });
 
-      if (!insertError) {
+      if (insertRes.ok) {
         const mappedUser = mapDbUser(newUser);
         set((state) => ({
           currentUser: mappedUser,
@@ -94,7 +96,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         localStorage.setItem('auth_user_id', mappedUser.id);
         return true;
       } else {
-        console.error("Failed to create new user profile in Supabase:", insertError);
+        const errData = await insertRes.json();
+        console.error("Failed to create new user profile in Backend:", errData);
         return false;
       }
     } catch (e) {
@@ -120,27 +123,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (get().isInitialized) return;
 
     try {
-      const { data: dbUsers, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('full_name', { ascending: true });
-
-      if (dbUsers && !error) {
-        const users = dbUsers.map(mapDbUser);
+      const res = await fetch(`${API_URL}/api/users`);
+      if (res.ok) {
+        const { data: dbUsers } = await res.json();
+        const users: User[] = (dbUsers || []).map(mapDbUser);
         set({ allUsers: users });
 
         const storedUserId = localStorage.getItem('auth_user_id');
         if (storedUserId) {
-          const user = users.find((u) => u.id === storedUserId);
+          const user = users.find((u: User) => u.id === storedUserId);
           if (user) {
             set({ currentUser: user, currentRole: user.role });
           }
         }
-      } else if (error) {
-        console.error("Supabase auth initialize error:", error);
+      } else {
+        console.error("Backend auth initialize error status:", res.status);
       }
     } catch (e) {
-      console.error("Failed to initialize auth from Supabase", e);
+      console.error("Failed to initialize auth from Backend", e);
     } finally {
       set({ isInitialized: true });
     }
