@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+  
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+:root {
+  --background: #f8fafc; /* Blueprint White Paper */
+  --foreground: #0f172a; /* Slate 900 */
+  
+  --card: #ffffff; /* Clean drafting sheet */
+  --card-foreground: #0f172a;
+  
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  
+  --primary: #1d4ed8; /* Blueprint Blue */
+  --primary-foreground: #ffffff;
+  
+  --secondary: #f1f5f9; /* Slate 100 */
+  --secondary-foreground: #0f172a;
+  
+  --muted: #f8fafc;
+  --muted-foreground: #64748b; /* Pencil Gray */
+  
+  --accent: #eff6ff; /* Blueprint Wash */
+  --accent-foreground: #1d4ed8;
+  
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  
+  --border: #e2e8f0; /* Soft Slate 200 */
+  --input: #e2e8f0;
+  --ring: #1d4ed8;
+  
+  --radius: 0.75rem; /* Smoother rounded corners */
+
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(226, 232, 240, 0.8);
+  --glass-shadow: 0 4px 20px 0 rgba(15, 23, 42, 0.05);
+}
+
+/* Base Body with Grid Paper Texture */
+body {
+  background-color: var(--background);
+  background-image: 
+    linear-gradient(to right, rgba(29, 78, 216, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(29, 78, 216, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  overflow-x: hidden;
+}
+
+/* Double-Border Technical Drawing Style */
+.border-draft {
+  position: relative;
+  border: 1px solid var(--border);
+}
+
+.border-draft::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--border);
+  opacity: 0.35;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* Glassmorphism Utility Classes */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* CAD HUD/Title Block layout table styling */
+.cad-title-block {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1.5px solid var(--border);
+  font-size: 9px;
+  font-family: monospace;
+}
+
+.cad-title-cell {
+  border: 0.5px solid var(--border);
+  padding: 4px;
+}
+
+/* Technical drawing crosshair line indicator */
+.crosshair-line-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0.5px;
+  background-color: rgba(29, 78, 216, 0.25);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.crosshair-line-v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0.5px;
+  background-color: rgba(29, 78, 216, 0.25);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Custom animations */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Technical SVG connector wire dash flow */
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.animate-dash-flow {
+  stroke-dasharray: 4,4;
+  animation: dash-flow 0.8s linear infinite;
+}
+
