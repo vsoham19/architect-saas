@@ -3,79 +3,73 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
-// ROUTES
-import userRoutes from "./src/routes/userRoutes.js";
-import projectRoutes from "./src/routes/projectRoutes.js";
-import taskRoutes from "./src/routes/taskRoutes.js";
-import documentRoutes from "./src/routes/documentRoutes.js";
-import notificationRoutes from "./src/routes/notificationRoutes.js";
-import auditRoutes from "./src/routes/auditRoutes.js";
-
-// MIDDLEWARE
-import { errorHandler } from "./src/middleware/error.js";
-
 dotenv.config();
 
 const app = express();
 
-// ======================
-// MIDDLEWARE
-// ======================
-
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "apikey"]
-}));
-
+app.use(cors());
 app.use(express.json());
 
-// ======================
-// SUPABASE
-// ======================
-
-const supabase = createClient(
+createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-// ======================
-// HEALTH ROUTES
-// ======================
-
 app.get("/", (req, res) => {
-  res.status(200).json({
+  res.json({
     status: "ok",
-    message: "Backend running successfully"
+    message: "Core backend working"
   });
 });
 
-app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    status: "ok",
-    message: "Backend running successfully"
-  });
-});
+// ===== TEST ROUTES ONE BY ONE =====
 
-// ======================
-// API ROUTES
-// ======================
+try {
+  const userRoutes = (await import("./src/routes/userRoutes.js")).default;
+  app.use("/api/users", userRoutes);
+  console.log("✅ userRoutes loaded");
+} catch (err) {
+  console.error("❌ userRoutes failed:", err);
+}
 
-app.use("/api/users", userRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/tasks", taskRoutes);
-app.use("/api/documents", documentRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/audit-logs", auditRoutes);
+try {
+  const projectRoutes = (await import("./src/routes/projectRoutes.js")).default;
+  app.use("/api/projects", projectRoutes);
+  console.log("✅ projectRoutes loaded");
+} catch (err) {
+  console.error("❌ projectRoutes failed:", err);
+}
 
-// ======================
-// ERROR HANDLER
-// ======================
+try {
+  const taskRoutes = (await import("./src/routes/taskRoutes.js")).default;
+  app.use("/api/tasks", taskRoutes);
+  console.log("✅ taskRoutes loaded");
+} catch (err) {
+  console.error("❌ taskRoutes failed:", err);
+}
 
-app.use(errorHandler);
+try {
+  const documentRoutes = (await import("./src/routes/documentRoutes.js")).default;
+  app.use("/api/documents", documentRoutes);
+  console.log("✅ documentRoutes loaded");
+} catch (err) {
+  console.error("❌ documentRoutes failed:", err);
+}
 
-// ======================
-// EXPORT FOR VERCEL
-// ======================
+try {
+  const notificationRoutes = (await import("./src/routes/notificationRoutes.js")).default;
+  app.use("/api/notifications", notificationRoutes);
+  console.log("✅ notificationRoutes loaded");
+} catch (err) {
+  console.error("❌ notificationRoutes failed:", err);
+}
+
+try {
+  const auditRoutes = (await import("./src/routes/auditRoutes.js")).default;
+  app.use("/api/audit-logs", auditRoutes);
+  console.log("✅ auditRoutes loaded");
+} catch (err) {
+  console.error("❌ auditRoutes failed:", err);
+}
 
 export default app;
