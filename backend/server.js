@@ -13,18 +13,17 @@ import auditRoutes from './src/routes/auditRoutes.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 // Enable CORS
 app.use(cors({
-  origin: '*', // Allow all origins for dev/testing, customize in production
+  origin: '*',
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
 }));
 
 app.use(express.json());
 
-// Base health routes
+// Health Routes
 app.get('/', (req, res) => {
   res.status(200).json({
     status: "ok",
@@ -39,7 +38,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Domain routes
+// API Routes
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
@@ -47,9 +46,8 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/audit-logs', auditRoutes);
 
-// Error Handling Middleware
+// Error Middleware
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`SaaS ERP Backend server running on port ${PORT}`);
-});
+// IMPORTANT FOR VERCEL
+export default app;
