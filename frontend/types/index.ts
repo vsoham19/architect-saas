@@ -77,6 +77,7 @@ export interface DocumentVersion {
   uploaded_by: string;
   created_at: string;
   status: VersionStatus;
+  drawing_data?: any;
 }
 
 export interface ProposedChange {

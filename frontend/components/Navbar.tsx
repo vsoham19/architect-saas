@@ -15,13 +15,13 @@ import {
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentRole, switchRole, allUsers, currentUser, logout } = useAuthStore();
+  const { currentRole, login, allUsers, currentUser, logout } = useAuthStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextRole = e.target.value as any;
-    switchRole(nextRole);
+  const handleUserChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextUserId = e.target.value;
+    login(nextUserId);
     router.refresh();
   };
 
@@ -109,16 +109,16 @@ export default function Navbar() {
               <span>Simulation Mode</span>
             </div>
 
-            {/* Role Switcher Dropdown */}
+            {/* User Profile Switcher Dropdown */}
             <div className="relative flex items-center">
               <select
-                value={currentRole || ''}
-                onChange={handleRoleChange}
+                value={currentUser?.id || ''}
+                onChange={handleUserChange}
                 className="text-xs font-bold bg-[#f1f5f9] border border-slate-200 rounded-lg pl-3 pr-8 py-1.5 hover:bg-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer text-slate-700"
               >
                 {allUsers.map((u) => (
-                  <option key={u.id} value={u.role}>
-                    Role: {u.role === 'junior' ? 'JUNIOR' : u.role === 'senior' ? 'SENIOR' : u.role === 'principal' ? 'PRINCIPAL' : 'ADMIN'} ({u.name.split(' ')[0]})
+                  <option key={u.id} value={u.id}>
+                    {u.role.toUpperCase()}: {u.name}
                   </option>
                 ))}
               </select>

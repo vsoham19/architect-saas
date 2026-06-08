@@ -87,8 +87,18 @@ interface DBState {
   addActivityLog: (params: Omit<ActivityLog, 'id' | 'created_at'>) => Promise<void>;
 }
 
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-const API_URL = rawApiUrl.replace(/\/$/, '');
+const getApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const hn = window.location.hostname;
+    if (hn === 'localhost' || hn === '127.0.0.1' || hn === '[::1]' || hn.startsWith('192.168.') || hn.startsWith('10.') || hn.startsWith('172.')) {
+      return 'http://localhost:5000';
+    }
+  }
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  return rawApiUrl.replace(/\/$/, '');
+};
+const API_URL = getApiUrl();
+
 
 const fetchJSON = async (url: string, options?: RequestInit) => {
   const res = await fetch(url, options);
@@ -151,7 +161,7 @@ const mapDocument = (d: any, status: DocumentStatus): Document => ({
   current_version_id: d.current_version_id
 });
 
-const mapVersion = (v: any): DocumentVersion => ({
+export const mapVersion = (v: any): DocumentVersion => ({
   id: v.id,
   document_id: v.document_id,
   version_number: `v${v.revision_number}.0.0`,
@@ -160,7 +170,8 @@ const mapVersion = (v: any): DocumentVersion => ({
   changelog: v.change_summary || '',
   uploaded_by: v.created_by || '',
   created_at: v.created_at,
-  status: 'pending' // local calculation
+  status: 'pending', // local calculation
+  drawing_data: v.drawing_data
 });
 
 const mapReview = (r: any): DocumentReview => {

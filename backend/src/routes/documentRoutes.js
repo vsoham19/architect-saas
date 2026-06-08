@@ -4,7 +4,8 @@ import {
   getDocVersions, createDocVersion,
   getDocReviews, createDocReview,
   getDocApprovals, createDocApproval,
-  getApprovalTaskTags, createApprovalTaskTags
+  getApprovalTaskTags, createApprovalTaskTags,
+  uploadDrawing, updateVersionDrawingData
 } from '../controllers/documentController.js';
 
 const router = express.Router();
@@ -13,10 +14,12 @@ const router = express.Router();
 router.get('/', getDocuments);
 router.post('/', createDocument);
 router.patch('/:id/version', updateDocumentVersion);
+router.post('/upload-drawing', uploadDrawing);
 
 // Versions
 router.get('/versions', getDocVersions);
 router.post('/versions', createDocVersion);
+router.patch('/versions/:id/drawing-data', updateVersionDrawingData);
 
 // Reviews
 router.get('/reviews', getDocReviews);

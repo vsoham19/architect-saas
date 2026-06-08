@@ -81,7 +81,7 @@ export default function ProjectDetailsPage() {
       assignedJuniorId: taskJunior || null,
       assignedSeniorId: taskSenior || null,
       dueDate: new Date(taskDueDate).toISOString(),
-      creatorId: currentUser?.id || 'u-1'
+      creatorId: currentUser?.id || '00000000-0000-0000-0000-000000000001'
     });
 
     setTaskTitle('');
@@ -104,7 +104,7 @@ export default function ProjectDetailsPage() {
       changelog: changelog || 'Initial draft upload',
       fileUrl: `/drawings/${docName.toLowerCase().replace(/\s+/g, '_')}_v1.jpg`,
       fileSize: Math.floor(Math.random() * 15000000) + 5000000,
-      uploadedBy: currentUser?.id || 'u-1'
+      uploadedBy: currentUser?.id || '00000000-0000-0000-0000-000000000001'
     });
 
     setDocName('');
@@ -155,7 +155,7 @@ export default function ProjectDetailsPage() {
           <div className="flex items-center gap-3">
             <select
               value={project.status}
-              onChange={(e) => updateProjectStatus(projectId, e.target.value as any, currentUser?.id || 'u-1')}
+              onChange={(e) => updateProjectStatus(projectId, e.target.value as any, currentUser?.id || '00000000-0000-0000-0000-000000000001')}
               className="text-xs font-bold bg-secondary border border-border rounded-xl px-3 py-2 focus:outline-none cursor-pointer text-foreground"
             >
               <option value="upcoming">Upcoming</option>

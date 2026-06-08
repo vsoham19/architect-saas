@@ -3,12 +3,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useDBStore } from '../../../../store/dbStore';
+import { useDBStore, mapVersion } from '../../../../store/dbStore';
 import { useAuthStore } from '../../../../store/authStore';
 import { 
   FileText, Check, ShieldCheck, AlertCircle, Clock, ChevronDown, 
-  MessageSquare, PlusCircle, Tag, Layers, HelpCircle, AlertTriangle, Eye, EyeOff, ArrowLeft, X, ArrowLeftRight
+  MessageSquare, PlusCircle, Tag, Layers, HelpCircle, AlertTriangle, Eye, EyeOff, ArrowLeft, X, ArrowLeftRight,
+  Sparkles, RefreshCcw, Paintbrush, Square, Circle, Eraser, Trash2, Undo2, Save, Upload
 } from 'lucide-react';
+
+const getApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const hn = window.location.hostname;
+    if (hn === 'localhost' || hn === '127.0.0.1' || hn === '[::1]' || hn.startsWith('192.168.') || hn.startsWith('10.') || hn.startsWith('172.')) {
+      return 'http://localhost:5000';
+    }
+  }
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  return rawApiUrl.replace(/\/$/, '');
+};
 import { motion, AnimatePresence } from 'framer-motion';
 import { DocumentVersion, ProposedChange, Task } from '../../../../types';
 
@@ -18,6 +30,11 @@ export default function DocumentWorkspacePage() {
   const router = useRouter();
   const docId = params.id as string;
   const versionQueryId = searchParams.get('version');
+
+  useEffect(() => {
+    console.log("[Workspace] Using API URL:", getApiUrl());
+  }, []);
+
 
   const { currentUser, currentRole, allUsers: allUsersList } = useAuthStore();
   const { 
@@ -32,43 +49,21 @@ export default function DocumentWorkspacePage() {
   // Active Version selection
   const [activeVersion, setActiveVersion] = useState<DocumentVersion | null>(null);
 
-  // Initialize selected version from query param or default to current
-  useEffect(() => {
-    if (docVersions.length > 0) {
-      if (versionQueryId) {
-        const found = docVersions.find(v => v.id === versionQueryId);
-        if (found) {
-          setActiveVersion(found);
-          return;
-        }
-      }
-      // Default to document's current version or the latest uploaded
-      const current = docVersions.find(v => v.id === doc?.current_version_id);
-      setActiveVersion(current || docVersions[docVersions.length - 1]);
-    }
-  }, [docId, versionQueryId, doc, docVersions.length]);
-
-  // Review states
-  const reviews = activeVersion 
-    ? documentReviews.filter(r => r.document_version_id === activeVersion.id)
-    : [];
-
-  const allProposedChanges = reviews.flatMap(r => r.proposed_changes);
-
-  // Find approval data for this version if it exists
-  const approval = activeVersion 
-    ? useDBStore.getState().documentApprovals.find(a => a.document_version_id === activeVersion.id)
-    : null;
-  const approverUser = approval 
-    ? useAuthStore.getState().allUsers.find(u => u.id === approval.approver_id)
-    : null;
-
   // Interactive CAD coordinates comments
   const canvasRef = useRef<HTMLDivElement>(null);
   const [showAddChangeForm, setShowAddChangeForm] = useState(false);
   const [clickCoords, setClickCoords] = useState<{ x: number; y: number } | null>(null);
   const [newChangeDesc, setNewChangeDesc] = useState('');
-  const [selectedChangePin, setSelectedChangePin] = useState<ProposedChange | null>(null);
+  const [selectedChangePin, setSelectedChangePin] = useState<any | null>(null);
+
+  // AI & Canvas Pins States
+  const [canvasPins, setCanvasPins] = useState<any[]>([]);
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [drawingElements, setDrawingElements] = useState<any[]>([]);
+  const [elementsLoading, setElementsLoading] = useState(false);
+  const [diffLog, setDiffLog] = useState<any>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [aiStatuses, setAiStatuses] = useState<Record<string, 'processing' | 'complete' | 'unavailable'>>({});
 
   // Approval Panel States
   const [approvalNotes, setApprovalNotes] = useState('');
@@ -96,6 +91,410 @@ export default function DocumentWorkspacePage() {
     electrical: true
   });
 
+  // Drawing Canvas States
+  const [drawingMode, setDrawingMode] = useState<'pin' | 'draw'>('pin');
+  const [brushTool, setBrushTool] = useState<'pencil' | 'rectangle' | 'circle' | 'eraser'>('pencil');
+  const [brushColor, setBrushColor] = useState<string>('#e11d48');
+  const [brushWidth, setBrushWidth] = useState<number>(5);
+  const [strokes, setStrokes] = useState<any[]>([]);
+  const [undoStack, setUndoStack] = useState<any[]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawStartPoint, setDrawStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [currentStroke, setCurrentStroke] = useState<any | null>(null);
+
+  // Refs & Upload States
+  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [uploadTypeConfirm, setUploadTypeConfirm] = useState<{ file: File; base64: string } | null>(null);
+  const [hoverCoords, setHoverCoords] = useState<{ x: number; y: number } | null>(null);
+
+  // Vector stroke drawing logic
+  const drawAllStrokes = (ctx: CanvasRenderingContext2D, strokeList: any[]) => {
+    ctx.clearRect(0, 0, 800, 450);
+    
+    strokeList.forEach((stroke) => {
+      ctx.beginPath();
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (stroke.tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      if (stroke.tool === 'pencil' || stroke.tool === 'eraser') {
+        if (stroke.points && stroke.points.length > 0) {
+          ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+          for (let i = 1; i < stroke.points.length; i++) {
+            ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+          }
+          ctx.stroke();
+        }
+      } else if (stroke.tool === 'rectangle') {
+        const p1 = stroke.points[0];
+        const p2 = stroke.points[1];
+        if (p1 && p2) {
+          ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+        }
+      } else if (stroke.tool === 'circle') {
+        const p1 = stroke.points[0];
+        const p2 = stroke.points[1];
+        if (p1 && p2) {
+          const rx = (p2.x - p1.x) / 2;
+          const ry = (p2.y - p1.y) / 2;
+          const cx = p1.x + rx;
+          const cy = p1.y + ry;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.abs(rx), Math.abs(ry), 0, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+      }
+    });
+    ctx.globalCompositeOperation = 'source-over'; // restore standard drawing
+  };
+
+  const handleDrawingPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (drawingMode !== 'draw' || !drawingCanvasRef.current) return;
+    setIsDrawing(true);
+    
+    const rect = drawingCanvasRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 800;
+    const y = ((e.clientY - rect.top) / rect.height) * 450;
+    
+    setDrawStartPoint({ x, y });
+    
+    const newStroke = {
+      tool: brushTool,
+      color: brushColor,
+      width: brushWidth,
+      points: [{ x, y }]
+    };
+    setCurrentStroke(newStroke);
+  };
+
+  const handleDrawingPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !drawingCanvasRef.current || !currentStroke || !drawStartPoint) return;
+    
+    const ctx = drawingCanvasRef.current.getContext('2d');
+    if (!ctx) return;
+    
+    const rect = drawingCanvasRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 800;
+    const y = ((e.clientY - rect.top) / rect.height) * 450;
+    
+    if (brushTool === 'pencil' || brushTool === 'eraser') {
+      const updatedStroke = {
+        ...currentStroke,
+        points: [...currentStroke.points, { x, y }]
+      };
+      setCurrentStroke(updatedStroke);
+      drawAllStrokes(ctx, [...strokes, updatedStroke]);
+    } else if (brushTool === 'rectangle' || brushTool === 'circle') {
+      const updatedStroke = {
+        ...currentStroke,
+        points: [drawStartPoint, { x, y }]
+      };
+      setCurrentStroke(updatedStroke);
+      drawAllStrokes(ctx, [...strokes, updatedStroke]);
+    }
+  };
+
+  const handleDrawingPointerUp = () => {
+    if (!isDrawing || !currentStroke) return;
+    setIsDrawing(false);
+    
+    const updatedStrokes = [...strokes, currentStroke];
+    setStrokes(updatedStrokes);
+    setUndoStack([]); // clear redo stack on new stroke
+    setCurrentStroke(null);
+    setDrawStartPoint(null);
+  };
+
+  const handleUndo = () => {
+    if (strokes.length === 0) return;
+    const last = strokes[strokes.length - 1];
+    setUndoStack(prev => [...prev, last]);
+    setStrokes(prev => prev.slice(0, prev.length - 1));
+  };
+
+  const handleRedo = () => {
+    if (undoStack.length === 0) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, prev.length - 1));
+    setStrokes(prev => [...prev, last]);
+  };
+
+  const handleClear = () => {
+    if (window.confirm("Are you sure you want to clear all sketches on this canvas?")) {
+      setStrokes([]);
+      setUndoStack([]);
+    }
+  };
+
+  const handleSaveSketches = async () => {
+    if (!activeVersion) return;
+    
+    try {
+      const res = await fetch(`${getApiUrl()}/api/documents/versions/${activeVersion.id}/drawing-data`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          drawing_data: { strokes }
+        })
+      });
+      const resJson = await res.json();
+      if (resJson.success || resJson.status === 'success') {
+        // Sync local cache
+        activeVersion.drawing_data = { strokes };
+        useDBStore.setState((state) => ({
+          documentVersions: state.documentVersions.map(v => 
+            v.id === activeVersion.id ? { ...v, drawing_data: { strokes } } : v
+          )
+        }));
+        alert("Sketches saved successfully!");
+      }
+    } catch (e) {
+      console.error("Failed to save sketches:", e);
+      alert("Failed to save drawing sketches. Please check connection.");
+    }
+  };
+
+  // Sync strokes on activeVersion change
+  useEffect(() => {
+    if (activeVersion) {
+      const savedSketches = activeVersion.drawing_data?.strokes || [];
+      setStrokes(savedSketches);
+      setUndoStack([]);
+      
+      setTimeout(() => {
+        if (drawingCanvasRef.current) {
+          const ctx = drawingCanvasRef.current.getContext('2d');
+          if (ctx) {
+            drawAllStrokes(ctx, savedSketches);
+          }
+        }
+      }, 100);
+    } else {
+      setStrokes([]);
+      setUndoStack([]);
+    }
+  }, [activeVersion]);
+
+  // Redraw canvas if it exists when strokes change or drawing mode changes
+  useEffect(() => {
+    if (drawingCanvasRef.current) {
+      const ctx = drawingCanvasRef.current.getContext('2d');
+      if (ctx) {
+        drawAllStrokes(ctx, strokes);
+      }
+    }
+  }, [strokes, drawingMode]);
+
+  // Handle file selection
+  const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeVersion) return;
+
+    if (file.size > 30 * 1024 * 1024) {
+      alert("File size exceeds 30MB limit.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Data = reader.result as string;
+      setUploadTypeConfirm({ file, base64: base64Data });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle confirmed file upload (replace current background vs create new version)
+  const handleImageUploadConfirmed = async (isCurrentVersion: boolean) => {
+    if (!uploadTypeConfirm || !activeVersion || !doc) return;
+    const { file, base64 } = uploadTypeConfirm;
+    setUploadTypeConfirm(null);
+    setImageUploading(true);
+
+    try {
+      const payload: any = {
+        document_id: doc.id,
+        filename: file.name,
+        base64Data: base64,
+        changelog: isCurrentVersion 
+          ? `Updated image background of ${activeVersion.version_number}`
+          : `Created new version with drawing: ${file.name}`,
+        created_by: currentUser?.id
+      };
+
+      if (isCurrentVersion) {
+        payload.version_id = activeVersion.id;
+      }
+
+      const res = await fetch(`${getApiUrl()}/api/documents/upload-drawing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const resJson = await res.json();
+      if (resJson.success || resJson.status === 'success') {
+        const mappedVer = mapVersion(resJson.data);
+
+        setAiStatuses((prev) => ({ ...prev, [mappedVer.id]: 'processing' }));
+
+        if (isCurrentVersion) {
+          setActiveVersion(mappedVer);
+          useDBStore.setState((state) => ({
+            documentVersions: state.documentVersions.map(v => 
+              v.id === mappedVer.id ? mappedVer : v
+            )
+          }));
+          alert("Drawing background updated! AI pipeline analysis started in background.");
+        } else {
+          useDBStore.setState((state) => ({
+            documentVersions: [...state.documentVersions, mappedVer],
+            documents: state.documents.map(d => 
+              d.id === doc.id ? { ...d, current_version_id: mappedVer.id } : d
+            )
+          }));
+          setActiveVersion(mappedVer);
+          alert("New drawing version created! AI pipeline analysis started in background.");
+        }
+        
+        fetchAiData(mappedVer.id);
+        fetchDiffLog();
+      } else {
+        alert(`Upload failed: ${resJson.message || 'unknown error'}`);
+      }
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("An error occurred during file upload.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  // Initialize selected version from query param or default to current
+  useEffect(() => {
+    if (docVersions.length > 0) {
+      if (versionQueryId) {
+        const found = docVersions.find(v => v.id === versionQueryId);
+        if (found) {
+          setActiveVersion(found);
+          return;
+        }
+      }
+      // Default to document's current version or the latest uploaded
+      const current = docVersions.find(v => v.id === doc?.current_version_id);
+      setActiveVersion(current || docVersions[docVersions.length - 1]);
+    }
+  }, [docId, versionQueryId, doc, docVersions.length]);
+
+  // Fetch canvas pins on version selection
+  useEffect(() => {
+    if (activeVersion) {
+      fetch(`${getApiUrl()}/api/canvas/pins/${activeVersion.id}`)
+        .then(res => res.json())
+        .then(res => {
+          if (res.success || res.status === 'success') {
+            setCanvasPins(res.data || []);
+          }
+        })
+        .catch(err => console.error("Error fetching canvas pins:", err));
+    }
+  }, [activeVersion]);
+
+  // Fetch AI elements and diff log
+  const fetchAiData = async (versionId: string) => {
+    setElementsLoading(true);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/ai/drawing-elements/${versionId}`);
+      const data = await res.json();
+      if (data.success || data.status === 'success') {
+        setDrawingElements(data.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching AI elements:", err);
+    } finally {
+      setElementsLoading(false);
+    }
+  };
+
+  const fetchDiffLog = async () => {
+    setDiffLoading(true);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/ai/diff/${docId}`);
+      const data = await res.json();
+      if (data.success || data.status === 'success') {
+        setDiffLog(data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching diff log:", err);
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeVersion) {
+      fetchAiData(activeVersion.id);
+      fetchDiffLog();
+    }
+  }, [activeVersion]);
+
+  // Poll version AI statuses (every 5 seconds)
+  useEffect(() => {
+    const pollVersionStatuses = async () => {
+      const statusesToPoll = docVersions.filter(v => !aiStatuses[v.id] || aiStatuses[v.id] === 'processing');
+      
+      for (const v of statusesToPoll) {
+        try {
+          const res = await fetch(`${getApiUrl()}/api/ai/drawing-elements/${v.id}`);
+          const json = await res.json();
+          if (json.success || json.status === 'success') {
+            const elements = json.data || [];
+            if (elements.length > 0) {
+              setAiStatuses((prev: Record<string, 'processing' | 'complete' | 'unavailable'>) => ({ ...prev, [v.id]: 'complete' }));
+            } else {
+              const versionCreatedAt = new Date(v.created_at).getTime();
+              const timePassed = Date.now() - versionCreatedAt;
+              if (timePassed > 60000) {
+                setAiStatuses((prev: Record<string, 'processing' | 'complete' | 'unavailable'>) => ({ ...prev, [v.id]: 'unavailable' }));
+              } else {
+                setAiStatuses((prev: Record<string, 'processing' | 'complete' | 'unavailable'>) => ({ ...prev, [v.id]: 'processing' }));
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error polling AI status:", e);
+        }
+      }
+    };
+
+    pollVersionStatuses();
+    const interval = setInterval(pollVersionStatuses, 5000);
+    return () => clearInterval(interval);
+  }, [docVersions, aiStatuses]);
+
+  // Review states
+  const reviews = activeVersion 
+    ? documentReviews.filter(r => r.document_version_id === activeVersion.id)
+    : [];
+
+  const allProposedChanges = reviews.flatMap(r => r.proposed_changes);
+
+  // Find approval data for this version if it exists
+  const approval = activeVersion 
+    ? useDBStore.getState().documentApprovals.find(a => a.document_version_id === activeVersion.id)
+    : null;
+  const approverUser = approval 
+    ? useAuthStore.getState().allUsers.find(u => u.id === approval.approver_id)
+    : null;
+
   if (!doc) {
     return (
       <div className="py-20 text-center text-xs font-semibold text-slate-500">
@@ -112,7 +511,6 @@ export default function DocumentWorkspacePage() {
     .filter(tm => tm.team_id === useDBStore.getState().teams.find(t => t.project_id === doc.project_id)?.id && tm.role === 'junior');
 
   // Hover crosshairs state
-  const [hoverCoords, setHoverCoords] = useState<{ x: number; y: number } | null>(null);
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!canvasRef.current) return;
@@ -129,9 +527,10 @@ export default function DocumentWorkspacePage() {
   };
 
   const handleSliderMove = (clientX: number) => {
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = ((clientX - rect.left - 32) / (rect.width - 32)) * 100;
+    const wrapper = document.getElementById('drawing-content-wrapper');
+    if (!wrapper) return;
+    const rect = wrapper.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * 100;
     const clampedX = Math.max(0, Math.min(100, x));
     setSliderPosition(clampedX);
   };
@@ -140,10 +539,11 @@ export default function DocumentWorkspacePage() {
     if (isDraggingSlider) {
       handleSliderMove(e.clientX);
     } else {
-      if (!canvasRef.current) return;
-      const rect = canvasRef.current.getBoundingClientRect();
-      const x = ((e.clientX - rect.left - 32) / (rect.width - 32)) * 100;
-      const y = ((e.clientY - rect.top - 24) / (rect.height - 24)) * 100;
+      const wrapper = document.getElementById('drawing-content-wrapper');
+      if (!wrapper) return;
+      const rect = wrapper.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
 
       if (x >= 0 && x <= 100 && y >= 0 && y <= 100) {
         setHoverCoords({ x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
@@ -165,7 +565,7 @@ export default function DocumentWorkspacePage() {
     const showElectrical = !isV1_0 && visibleLayers.electrical; // Available from v1.1.0 onwards
     
     return (
-      <svg className="absolute inset-0 w-full h-full p-8 opacity-65 pointer-events-none" viewBox="0 0 800 450">
+      <svg className="absolute inset-0 w-full h-full opacity-65 pointer-events-none" viewBox="0 0 800 450">
         {/* Structural Base Layer (Walls & Columns) */}
         {showStructural && (
           <g>
@@ -256,11 +656,13 @@ export default function DocumentWorkspacePage() {
 
   // Handle double click or click on CAD canvas to drop comment
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!canvasRef.current || (currentRole !== 'principal' && currentRole !== 'senior')) return;
+    if (drawingMode !== 'pin') return;
+    const wrapper = document.getElementById('drawing-content-wrapper');
+    if (!wrapper || (currentRole !== 'principal' && currentRole !== 'senior')) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left - 32) / (rect.width - 32)) * 100;
-    const y = ((e.clientY - rect.top - 24) / (rect.height - 24)) * 100;
+    const rect = wrapper.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
 
     if (x >= 0 && x <= 100 && y >= 0 && y <= 100) {
       setClickCoords({ x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
@@ -269,18 +671,56 @@ export default function DocumentWorkspacePage() {
     }
   };
 
-  const handleProposeChangeLocal = (e: React.FormEvent) => {
+  const handleProposeChangeLocal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clickCoords || !newChangeDesc.trim()) return;
+    if (!clickCoords || !newChangeDesc.trim() || !activeVersion) return;
 
-    setReviewChangesList(prev => [
-      ...prev,
-      { description: newChangeDesc.trim(), x: clickCoords.x, y: clickCoords.y }
-    ]);
+    const pinPayload = {
+      document_id: doc.id,
+      version_id: activeVersion.id,
+      x_percent: clickCoords.x,
+      y_percent: clickCoords.y,
+      note: newChangeDesc.trim(),
+      pin_type: 'review_comment',
+      created_by: currentUser?.id
+    };
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/canvas/pins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pinPayload)
+      });
+      const resJson = await res.json();
+      if (resJson.success || resJson.status === 'success') {
+        const newPin = resJson.data;
+        setCanvasPins((prev: any[]) => [...prev, newPin]);
+      }
+    } catch (err) {
+      console.error("Failed to save pin to DB:", err);
+    }
 
     setNewChangeDesc('');
     setShowAddChangeForm(false);
     setClickCoords(null);
+  };
+
+  const handleResolvePin = async (pinId: string) => {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/canvas/pins/${pinId}/resolve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolved_by: currentUser?.id })
+      });
+      const resJson = await res.json();
+      if (resJson.success || resJson.status === 'success') {
+        const updatedPin = resJson.data;
+        setCanvasPins((prev: any[]) => prev.map(p => p.id === pinId ? updatedPin : p));
+        setSelectedChangePin((prev: any) => prev && prev.id === pinId ? updatedPin : prev);
+      }
+    } catch (err) {
+      console.error("Failed to resolve pin:", err);
+    }
   };
 
   const handleSubmitReviewPackage = () => {
@@ -412,6 +852,17 @@ export default function DocumentWorkspacePage() {
               </button>
             )
           )}
+
+          <div className="h-5 w-px bg-slate-200" />
+
+          {/* AI Panel Toggle */}
+          <button
+            onClick={() => setIsAiPanelOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer shadow-xs flex items-center gap-1.5 transition-all"
+          >
+            <Sparkles size={11} className="animate-pulse text-indigo-200" />
+            AI Analysis
+          </button>
         </div>
       </div>
 
@@ -429,6 +880,168 @@ export default function DocumentWorkspacePage() {
                 * Click anywhere on drawing sheet to place a change proposal pin.
               </div>
             )}
+          </div>
+
+          {/* Drawing Toolbar */}
+          <div className="flex flex-wrap items-center justify-between bg-card p-3 rounded-2xl border border-border gap-2">
+            {/* Mode Switcher */}
+            <div className="flex items-center bg-secondary p-1 rounded-xl gap-1">
+              <button
+                type="button"
+                onClick={() => setDrawingMode('pin')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  drawingMode === 'pin' 
+                    ? 'bg-white text-foreground shadow-xs' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <PlusCircle size={14} />
+                Pin Comments
+              </button>
+              <button
+                type="button"
+                onClick={() => setDrawingMode('draw')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  drawingMode === 'draw' 
+                    ? 'bg-white text-foreground shadow-xs' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Paintbrush size={14} />
+                Draw Freehand
+              </button>
+            </div>
+
+            {/* Brush Controls (only in draw mode) */}
+            {drawingMode === 'draw' && (
+              <div className="flex items-center gap-4 flex-wrap">
+                {/* Tools */}
+                <div className="flex items-center gap-1 border-r border-border pr-3">
+                  {[
+                    { id: 'pencil', label: 'Pencil', icon: Paintbrush },
+                    { id: 'rectangle', label: 'Rectangle', icon: Square },
+                    { id: 'circle', label: 'Circle', icon: Circle },
+                    { id: 'eraser', label: 'Eraser', icon: Eraser }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setBrushTool(t.id as any)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer flex items-center gap-1 ${
+                        brushTool === t.id 
+                          ? 'bg-indigo-50 text-indigo-650 border border-indigo-200' 
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                      }`}
+                    >
+                      <t.icon size={11} />
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Colors (don't show for eraser) */}
+                {brushTool !== 'eraser' && (
+                  <div className="flex items-center gap-1.5 border-r border-border pr-3">
+                    {[
+                      { hex: '#e11d48', name: 'red' },
+                      { hex: '#2563eb', name: 'blue' },
+                      { hex: '#16a34a', name: 'green' },
+                      { hex: '#d97706', name: 'amber' },
+                      { hex: '#0f172a', name: 'black' }
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        type="button"
+                        onClick={() => setBrushColor(c.hex)}
+                        className={`h-5 w-5 rounded-full border transition-all cursor-pointer ${
+                          brushColor === c.hex 
+                            ? 'ring-2 ring-indigo-500 scale-110 border-white' 
+                            : 'border-slate-200'
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Size */}
+                <div className="flex items-center gap-1.5 border-r border-border pr-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Size:</span>
+                  <select
+                    value={brushWidth}
+                    onChange={(e) => setBrushWidth(parseInt(e.target.value))}
+                    className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none cursor-pointer text-slate-700"
+                  >
+                    {[2, 5, 8, 12, 18].map(sz => (
+                      <option key={sz} value={sz}>{sz}px</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleUndo}
+                    disabled={strokes.length === 0}
+                    className="p-1.5 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs flex items-center gap-1"
+                    title="Undo"
+                  >
+                    <Undo2 size={12} />
+                    Undo
+                  </button>
+                  {undoStack.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRedo}
+                      className="p-1.5 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground cursor-pointer text-xs flex items-center gap-1"
+                      title="Redo"
+                    >
+                      Redo
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    disabled={strokes.length === 0}
+                    className="p-1.5 rounded-lg border border-rose-250 bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs flex items-center gap-1"
+                    title="Clear sketches"
+                  >
+                    <Trash2 size={12} />
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveSketches}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-650 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer shadow-xs flex items-center gap-1.5"
+                  >
+                    <Save size={12} />
+                    Save Sketches
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Upload image background button */}
+            <div className="flex items-center gap-2">
+              <input 
+                type="file"
+                ref={fileInputRef}
+                accept="image/png, image/jpeg, image/jpg"
+                onChange={handleImageFileSelected}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={imageUploading}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-50 text-xs font-bold cursor-pointer flex items-center gap-1.5"
+              >
+                <Upload size={12} />
+                {imageUploading ? 'Uploading...' : 'Upload Image'}
+              </button>
+            </div>
           </div>
 
           {/* Canvas Sheet */}
@@ -503,41 +1116,162 @@ export default function DocumentWorkspacePage() {
               className="absolute top-6 left-8 right-0 bottom-0 overflow-hidden cursor-crosshair bg-slate-50"
             >
               {/* Technical Grid background */}
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(29,78,216,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(29,78,216,0.06)_1px,transparent_1px)] bg-[size:15px_15px] opacity-70" />
+              <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(29,78,216,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(29,78,216,0.06)_1px,transparent_1px)] bg-[size:15px_15px] opacity-70 animate-pulse-slow" />
               
-              {isCompareMode ? (
-                <>
-                  {/* Underlay Drawing: Active Version (revealed on the right) */}
-                  {renderCadLayers(activeVersion?.version_number || 'v1.1.0')}
+              {/* Padding Wrapper containing drawing layers & canvas annotations */}
+              <div className="absolute inset-0 p-8 select-none">
+                <div className="w-full h-full relative" id="drawing-content-wrapper">
+                  {isCompareMode ? (
+                    <>
+                      {/* Underlay Image: Active Version */}
+                      {activeVersion?.file_url && !activeVersion.file_url.includes('helix_auditorium_v1.jpg') && !activeVersion.file_url.includes('helix_facade_v1.jpg') && (
+                        <img 
+                          src={activeVersion.file_url.startsWith('http') || activeVersion.file_url.startsWith('/') 
+                            ? activeVersion.file_url 
+                            : `${getApiUrl()}${activeVersion.file_url}`
+                          } 
+                          alt="Drawing background" 
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                        />
+                      )}
+                      {renderCadLayers(activeVersion?.version_number || 'v1.1.0')}
 
-                  {/* Overlay Drawing: Compare Version (visible on the left, clipped by sliderPosition) */}
-                  <div 
-                    className="absolute inset-0 pointer-events-none overflow-hidden"
-                    style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
-                  >
-                    {renderCadLayers(compareVersion?.version_number || 'v1.0.0')}
-                  </div>
+                      {/* Overlay Image: Compare Version (clipped) */}
+                      <div 
+                        className="absolute inset-0 pointer-events-none overflow-hidden"
+                        style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+                      >
+                        {compareVersion?.file_url && !compareVersion.file_url.includes('helix_auditorium_v1.jpg') && !compareVersion.file_url.includes('helix_facade_v1.jpg') && (
+                          <img 
+                            src={compareVersion.file_url.startsWith('http') || compareVersion.file_url.startsWith('/') 
+                              ? compareVersion.file_url 
+                              : `${getApiUrl()}${compareVersion.file_url}`
+                            } 
+                            alt="Compare background" 
+                            className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                          />
+                        )}
+                        {renderCadLayers(compareVersion?.version_number || 'v1.0.0')}
+                      </div>
 
-                  {/* Slider drag overlay elements */}
-                  <div 
-                    className="absolute top-0 bottom-0 w-[1.5px] bg-blue-600 z-30 pointer-events-none"
-                    style={{ left: `${sliderPosition}%` }}
+                      {/* Slider drag overlay elements */}
+                      <div 
+                        className="absolute top-0 bottom-0 w-[1.5px] bg-blue-600 z-30 pointer-events-none"
+                        style={{ left: `${sliderPosition}%` }}
+                      />
+                      <div
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsDraggingSlider(true);
+                        }}
+                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-7 w-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md border-2 border-white flex items-center justify-center cursor-ew-resize z-35 select-none"
+                        style={{ left: `${sliderPosition}%` }}
+                      >
+                        <ArrowLeftRight size={11} className="select-none pointer-events-none" />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Active version image background */}
+                      {activeVersion?.file_url && !activeVersion.file_url.includes('helix_auditorium_v1.jpg') && !activeVersion.file_url.includes('helix_facade_v1.jpg') && (
+                        <img 
+                          src={activeVersion.file_url.startsWith('http') || activeVersion.file_url.startsWith('/') 
+                            ? activeVersion.file_url 
+                            : `${getApiUrl()}${activeVersion.file_url}`
+                          } 
+                          alt="Drawing background" 
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                        />
+                      )}
+                      {renderCadLayers(activeVersion?.version_number || 'v1.1.0')}
+                    </>
+                  )}
+
+                  {/* HTML5 Canvas overlay for sketches */}
+                  <canvas
+                    ref={drawingCanvasRef}
+                    width={800}
+                    height={450}
+                    onPointerDown={handleDrawingPointerDown}
+                    onPointerMove={handleDrawingPointerMove}
+                    onPointerUp={handleDrawingPointerUp}
+                    className={`absolute inset-0 w-full h-full z-25 select-none touch-none ${
+                      drawingMode === 'draw' ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'
+                    }`}
                   />
-                  <div
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setIsDraggingSlider(true);
-                    }}
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-7 w-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md border-2 border-white flex items-center justify-center cursor-ew-resize z-30 select-none"
-                    style={{ left: `${sliderPosition}%` }}
-                  >
-                    <ArrowLeftRight size={11} className="select-none pointer-events-none" />
+
+                  {/* Database Persisted Canvas Pins */}
+                  {canvasPins.map((pin) => {
+                    const isResolved = pin.resolved;
+                    return (
+                      <motion.button
+                        key={pin.id}
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedChangePin(pin);
+                          setShowAddChangeForm(false);
+                        }}
+                        className={`absolute h-5 w-5 rounded-full border border-slate-950 shadow-md flex items-center justify-center text-[9px] font-black text-white cursor-pointer z-28 transition-all ${
+                          isResolved ? 'bg-emerald-600 hover:bg-emerald-500 opacity-40' : 'bg-rose-600 hover:bg-rose-500'
+                        }`}
+                        style={{ left: `${pin.x_percent}%`, top: `${pin.y_percent}%`, transform: 'translate(-50%, -50%)' }}
+                        title={pin.note}
+                      >
+                        {isResolved ? '✓' : '!'}
+                      </motion.button>
+                    );
+                  })}
+
+                  {/* Active click coordinate prompt drop-circle */}
+                  {clickCoords && (
+                    <div
+                      className="absolute h-4 w-4 rounded-full border-2 border-white bg-indigo-600 animate-ping pointer-events-none z-28"
+                      style={{ left: `${clickCoords.x}%`, top: `${clickCoords.y}%`, transform: 'translate(-50%, -50%)' }}
+                    />
+                  )}
+
+                  {/* CAD Title Block overlay */}
+                  <div className="absolute bottom-4 right-4 bg-white border border-border/80 text-[7px] font-mono text-slate-700 select-none pointer-events-none z-28 w-44 shadow-sm">
+                    <div className="grid grid-cols-2 border-b border-border/80">
+                      <div className="p-1 border-r border-border/80 font-black truncate">AURA STUDIOS</div>
+                      <div className="p-1 truncate">SHEET: {doc.name.split('.')[0]}</div>
+                    </div>
+                    <div className="grid grid-cols-3">
+                      <div className="p-1 border-r border-border/80">SCALE: 1:100</div>
+                      <div className="p-1 border-r border-border/80 font-bold text-primary">REV: {activeVersion?.version_number}</div>
+                      <div className="p-1 text-[6px] uppercase font-bold truncate">APP: JENKINS</div>
+                    </div>
                   </div>
-                </>
-              ) : (
-                /* Standard Single Drawing View */
-                renderCadLayers(activeVersion?.version_number || 'v1.1.0')
+                </div>
+              </div>
+
+              {/* Upload blueprint zone when no background is set */}
+              {(!activeVersion?.file_url || activeVersion.file_url.includes('helix_auditorium_v1.jpg') || activeVersion.file_url.includes('helix_facade_v1.jpg')) && strokes.length === 0 && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-8 bg-slate-50/95 z-20">
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full max-w-md border-2 border-dashed border-slate-355 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-indigo-50/20 hover:border-indigo-400 transition-all gap-3"
+                  >
+                    <div className="h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-650">
+                      <Upload size={24} />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono">Upload Drawing Blueprint</h5>
+                      <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                        Select a PNG or JPG floor plan image to draw and annotate on. Uploading triggers automatic Gemini AI elements detection.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                    >
+                      Choose blueprint file
+                    </button>
+                  </div>
+                </div>
               )}
 
               {/* Cursor Technical Crosshairs HUD */}
@@ -546,7 +1280,7 @@ export default function DocumentWorkspacePage() {
                   <div className="absolute left-0 right-0 bg-primary/20 pointer-events-none" style={{ top: `${hoverCoords.y}%`, height: '0.5px' }} />
                   <div className="absolute top-0 bottom-0 bg-primary/20 pointer-events-none" style={{ left: `${hoverCoords.x}%`, width: '0.5px' }} />
                   <div 
-                    className="absolute p-1 bg-white/95 border border-slate-350 text-slate-800 rounded text-[8px] font-mono pointer-events-none z-20 shadow-md"
+                    className="absolute p-1 bg-white/95 border border-slate-350 text-slate-800 rounded text-[8px] font-mono pointer-events-none z-30 shadow-md"
                     style={{ left: `${hoverCoords.x + 2}%`, top: `${hoverCoords.y + 2}%` }}
                   >
                     X:{(hoverCoords.x * 0.5).toFixed(1)}m Y:{(hoverCoords.y * 0.3).toFixed(1)}m
@@ -554,13 +1288,13 @@ export default function DocumentWorkspacePage() {
                 </>
               )}
 
-              {/* Digital Stamp Approval Overlay (Animate stamp drop if approved) */}
+              {/* Digital Stamp Approval Overlay */}
               {activeVersion?.status === 'approved' && (
                 <motion.div
                   initial={{ scale: 1.8, opacity: 0, rotate: -35 }}
                   animate={{ scale: 1, opacity: 0.8, rotate: -8 }}
                   transition={{ type: 'spring', damping: 12, stiffness: 90, delay: 0.2 }}
-                  className="absolute top-12 right-12 border-4 border-double border-rose-600 text-rose-600 rounded-xl p-3 select-none pointer-events-none z-20 font-mono text-center flex flex-col items-center justify-center uppercase tracking-wider bg-white/50 backdrop-blur-3xs"
+                  className="absolute top-12 right-12 border-4 border-double border-rose-600 text-rose-600 rounded-xl p-3 select-none pointer-events-none z-28 font-mono text-center flex flex-col items-center justify-center uppercase tracking-wider bg-white/50 backdrop-blur-3xs"
                   style={{ transformOrigin: 'center' }}
                 >
                   <div className="text-[7px] font-extrabold tracking-widest border-b border-rose-600 pb-0.5 mb-1 px-2 w-full">
@@ -580,62 +1314,49 @@ export default function DocumentWorkspacePage() {
                   </div>
                 </motion.div>
               )}
+            </div>
+          </div>
 
-              {/* Existing Change Pins (Approved/Committed Reviews) */}
-              {allProposedChanges.map((pin) => (
-                <motion.button
-                  key={pin.id}
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedChangePin(pin);
-                    setShowAddChangeForm(false);
-                  }}
-                  className={`absolute h-5 w-5 rounded-full border border-slate-950 shadow-md flex items-center justify-center text-[9px] font-black text-white cursor-pointer z-10 ${
-                    pin.resolved ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
-                  }`}
-                  style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: 'translate(-50%, -50%)' }}
-                  title={pin.description}
-                >
-                  !
-                </motion.button>
-              ))}
-
-              {/* Local Draft Change Pins (Currently Proposing) */}
-              {reviewChangesList.map((pin, idx) => (
-                <motion.div
-                  key={idx}
-                  className="absolute h-5 w-5 rounded-full bg-amber-600 border border-slate-950 shadow-md flex items-center justify-center text-[9px] font-black text-white z-10"
-                  style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: 'translate(-50%, -50%)' }}
-                  title={pin.description}
-                >
-                  ?
-                </motion.div>
-              ))}
-
-              {/* Active click coordinate prompt drop-circle */}
-              {clickCoords && (
-                <div
-                  className="absolute h-4 w-4 rounded-full border-2 border-white bg-indigo-600 animate-ping pointer-events-none"
-                  style={{ left: `${clickCoords.x}%`, top: `${clickCoords.y}%`, transform: 'translate(-50%, -50%)' }}
-                />
-              )}
-
-              {/* CAD Title Block component overlay at bottom-right corner */}
-              <div className="absolute bottom-4 right-4 bg-white border border-border/80 text-[7px] font-mono text-slate-700 select-none pointer-events-none z-10 w-44 shadow-sm">
-                <div className="grid grid-cols-2 border-b border-border/80">
-                  <div className="p-1 border-r border-border/80 font-black truncate">AURA STUDIOS</div>
-                  <div className="p-1 truncate">SHEET: {doc.name.split('.')[0]}</div>
+          {/* Upload type confirm modal */}
+          {uploadTypeConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setUploadTypeConfirm(null)} />
+              <div className="relative w-full max-w-sm p-6 rounded-2xl border border-slate-200 bg-white shadow-2xl z-50 text-center space-y-4">
+                <div className="h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center mx-auto text-indigo-650">
+                  <Upload size={24} />
                 </div>
-                <div className="grid grid-cols-3">
-                  <div className="p-1 border-r border-border/80">SCALE: 1:100</div>
-                  <div className="p-1 border-r border-border/80 font-bold text-primary">REV: {activeVersion?.version_number}</div>
-                  <div className="p-1 text-[6px] uppercase font-bold truncate">APP: JENKINS</div>
+                <div>
+                  <h3 className="text-md font-bold text-slate-800">Upload Drawing Options</h3>
+                  <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                    Choose how you want to upload the selected blueprint drawing: <strong className="text-slate-705">{uploadTypeConfirm.file.name}</strong>.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleImageUploadConfirmed(true)}
+                    className="w-full py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all text-xs cursor-pointer shadow-md"
+                  >
+                    Update background of CURRENT Version
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleImageUploadConfirmed(false)}
+                    className="w-full py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all text-xs cursor-pointer border border-slate-200"
+                  >
+                    Create a NEW Version (Increment Rev)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadTypeConfirm(null)}
+                    className="w-full py-2 text-slate-400 hover:text-slate-600 transition-all text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Form to submit a proposed change at coordinates */}
           {showAddChangeForm && clickCoords && (
@@ -682,13 +1403,27 @@ export default function DocumentWorkspacePage() {
               className="p-4 rounded-2xl border border-border bg-card flex justify-between items-start"
             >
               <div>
-                <span className="text-[9px] uppercase font-bold text-rose-400 m-1 bg-rose-500/5 px-2 py-0.5 border border-rose-500/15 rounded inline-block">
-                  Change requested
+                <span className={`text-[9px] uppercase font-bold m-1 px-2 py-0.5 border rounded inline-block ${
+                  selectedChangePin.resolved
+                    ? 'text-emerald-400 bg-emerald-500/5 border-emerald-500/15'
+                    : 'text-rose-400 bg-rose-500/5 border-rose-500/15'
+                }`}>
+                  {selectedChangePin.resolved ? 'Resolved' : 'Change requested'}
                 </span>
-                <p className="text-xs text-foreground font-bold mt-2">{selectedChangePin.description}</p>
+                <p className="text-xs text-foreground font-bold mt-2">{selectedChangePin.note || selectedChangePin.description}</p>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Proposed by {useAuthStore.getState().allUsers.find(u => u.id === selectedChangePin.proposed_by)?.name} on {new Date(selectedChangePin.created_at).toLocaleDateString()}
+                  Proposed by {allUsersList.find(u => u.id === (selectedChangePin.created_by || selectedChangePin.proposed_by))?.name || 'Architect'} on {new Date(selectedChangePin.created_at).toLocaleDateString()}
                 </p>
+                
+                {/* Resolve Action button */}
+                {!selectedChangePin.resolved && (selectedChangePin.created_by || selectedChangePin.proposed_by) && (currentRole === 'principal' || currentRole === 'senior') && (
+                  <button
+                    onClick={() => handleResolvePin(selectedChangePin.id)}
+                    className="mt-3 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                  >
+                    Resolve Pin
+                  </button>
+                )}
               </div>
               <button
                 onClick={() => setSelectedChangePin(null)}
@@ -708,12 +1443,26 @@ export default function DocumentWorkspacePage() {
             <div className="space-y-3 max-h-40 overflow-y-auto pr-1">
               {docVersions.map((v) => (
                 <div key={v.id} className="flex justify-between items-start p-2 rounded-xl bg-secondary/25 border border-border/50">
-                  <div>
+                  <div className="flex-1 min-w-0 pr-2">
                     <span className="text-xs font-black text-foreground">{v.version_number}</span>
                     <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{v.changelog}</p>
                     <span className="text-[8px] text-slate-500 block mt-1">
                       Uploaded by {useAuthStore.getState().allUsers.find(u => u.id === v.uploaded_by)?.name}
                     </span>
+                    
+                    {/* AI Analysis Status Badge */}
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${
+                        aiStatuses[v.id] === 'complete'
+                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          : aiStatuses[v.id] === 'unavailable'
+                          ? 'text-slate-500 bg-slate-50 border-slate-200'
+                          : 'text-blue-700 bg-blue-50 border-blue-250 animate-pulse'
+                      }`}>
+                        {aiStatuses[v.id] === 'complete' && <Check size={8} />}
+                        AI: {aiStatuses[v.id] === 'complete' ? 'Complete' : aiStatuses[v.id] === 'unavailable' ? 'Unavailable' : 'Processing...'}
+                      </span>
+                    </div>
                   </div>
                   <span className={`text-[8px] font-bold uppercase px-1.5 py-0.25 rounded border ${
                     v.status === 'approved' 
@@ -1053,6 +1802,182 @@ export default function DocumentWorkspacePage() {
           </div>
         </div>
       )}
+
+      {/* Sliding AI Panel Drawer */}
+      <AnimatePresence>
+        {isAiPanelOpen && (
+          <>
+            {/* Backdrop overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.3 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAiPanelOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-3xs z-40"
+            />
+            {/* Drawer container */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 22, stiffness: 120 }}
+              className="fixed top-0 right-0 bottom-0 w-[380px] bg-white border-l border-slate-200 shadow-2xl z-50 overflow-y-auto p-6 flex flex-col space-y-6 text-slate-800"
+            >
+              <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="text-indigo-650 animate-pulse" size={18} />
+                  <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-800 font-mono">AI drawing analysis</h3>
+                </div>
+                <button
+                  onClick={() => setIsAiPanelOpen(false)}
+                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Section A: Elements Detected */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">AI Detected Elements</h4>
+                {elementsLoading ? (
+                  <div className="space-y-2">
+                    <div className="h-6 bg-slate-100 rounded-lg animate-pulse w-3/4" />
+                    <div className="h-6 bg-slate-100 rounded-lg animate-pulse w-1/2" />
+                    <div className="h-6 bg-slate-100 rounded-lg animate-pulse w-5/6" />
+                  </div>
+                ) : drawingElements.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-slate-400 text-xs gap-2 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                    <HelpCircle size={24} className="text-slate-300" />
+                    <span>No elements detected yet</span>
+                    <button
+                      onClick={() => fetchAiData(activeVersion?.id || '')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 hover:text-slate-850 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <RefreshCcw size={10} />
+                      Refresh
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Groups counts */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(
+                        drawingElements.reduce((acc, el) => {
+                          const t = el.element_type;
+                          acc[t] = (acc[t] || 0) + 1;
+                          return acc;
+                        }, {} as Record<string, number>)
+                      ).map(([type, count]) => {
+                        const countNum = count as number;
+                        return (
+                          <span key={type} className="text-[9px] font-mono font-bold bg-slate-50 border border-slate-200 px-2 py-0.5 rounded text-slate-655 uppercase">
+                            {type.replace('_', ' ')}s ({countNum})
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {/* List */}
+                    <div className="max-h-40 overflow-y-auto space-y-1.5 border border-slate-150 rounded-xl p-2.5 bg-slate-50/50">
+                      {drawingElements.map((el) => (
+                        <div key={el.id} className="flex justify-between items-center text-[10px] font-semibold text-slate-600">
+                          <span className="truncate pr-4">• {el.label}</span>
+                          <span className="font-mono text-indigo-650 font-black">{(el.confidence_score * 100).toFixed(0)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section B: Version Changes */}
+              <div className="space-y-3 pt-4 border-t border-slate-200">
+                <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">What Changed in This Version</h4>
+                {diffLoading ? (
+                  <div className="space-y-2">
+                    <div className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                  </div>
+                ) : !diffLog ? (
+                  <p className="text-slate-550 text-xs italic text-center py-4">No comparison diff log generated.</p>
+                ) : (
+                  <div className="space-y-3 text-xs font-semibold">
+                    {/* Added */}
+                    {diffLog.elements_added?.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 border border-emerald-200 rounded inline-block">Added</span>
+                        <div className="space-y-1 pl-1">
+                          {diffLog.elements_added.map((item: string, i: number) => (
+                            <div key={i} className="text-[10px] text-slate-500 leading-tight">• {item}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Removed */}
+                    {diffLog.elements_removed?.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-rose-700 bg-rose-50 px-2 py-0.5 border border-rose-200 rounded inline-block">Removed</span>
+                        <div className="space-y-1 pl-1">
+                          {diffLog.elements_removed.map((item: string, i: number) => (
+                            <div key={i} className="text-[10px] text-slate-500 leading-tight">• {item}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Modified */}
+                    {diffLog.elements_modified?.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-amber-700 bg-amber-50 px-2 py-0.5 border border-amber-200 rounded inline-block">Modified</span>
+                        <div className="space-y-1 pl-1">
+                          {diffLog.elements_modified.map((item: string, i: number) => (
+                            <div key={i} className="text-[10px] text-slate-500 leading-tight">• {item}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Summary */}
+                    <div className="pt-2">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">AI Summary</span>
+                      <p className="text-[11px] text-slate-500 font-medium mt-1 leading-relaxed">{diffLog.parsed_summary}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section C: Affected Tasks */}
+              <div className="space-y-3 pt-4 border-t border-slate-200">
+                <div className="flex flex-col">
+                  <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Possibly Affected Tasks</h4>
+                  <span className="text-[8px] font-bold text-slate-450 mt-0.5">AI SUGGESTIONS ONLY — NOT CONFIRMED</span>
+                </div>
+                {diffLoading ? (
+                  <div className="space-y-2">
+                    <div className="h-12 bg-slate-100 rounded-lg animate-pulse animate-pulse-slow" />
+                    <div className="h-12 bg-slate-100 rounded-lg animate-pulse" />
+                  </div>
+                ) : !diffLog || !diffLog.suggested_affected_tasks || diffLog.suggested_affected_tasks.length === 0 ? (
+                  <p className="text-slate-550 text-xs italic text-center py-4">No affected tasks identified by AI.</p>
+                ) : (
+                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                    {diffLog.suggested_affected_tasks.map((task: any, idx: number) => {
+                      const resolvedTaskObj = projTasks.find(t => t.id === task.task_id);
+                      return (
+                        <div key={idx} className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex flex-col space-y-1 hover:border-slate-350 hover:bg-slate-100/30 transition-all select-none">
+                          <div className="flex justify-between items-start gap-1">
+                            <h5 className="text-[10px] font-extrabold text-slate-800 leading-tight truncate flex-1">{resolvedTaskObj?.title || "Task ID: " + task.task_id.substring(0, 8)}</h5>
+                            <span className="text-[8px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-150 px-1.5 py-0.25 rounded shrink-0">
+                              {(task.confidence * 100).toFixed(0)}% Match
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-semibold leading-tight">{task.reason}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

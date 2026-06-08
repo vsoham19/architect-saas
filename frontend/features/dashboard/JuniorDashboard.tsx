@@ -55,7 +55,7 @@ export default function JuniorDashboard() {
         changelog: changelog || 'Initial deliverable draft',
         fileUrl: `/drawings/${docName.toLowerCase().replace(/\s+/g, '_')}_rev.jpg`,
         fileSize: Math.floor(Math.random() * 20000000) + 5000000, 
-        uploadedBy: currentUser?.id || 'u-4'
+        uploadedBy: currentUser?.id || '00000000-0000-0000-0000-000000000004'
       });
 
       setIsUploading(false);

@@ -26,46 +26,46 @@ export default function SettingsPage() {
   const simulateJuniorUpload = () => {
     // Simulate Liam Chen (Junior, u-5) uploading a new HVAC blueprint revision (doc-1)
     db.uploadDocumentVersion({
-      projectId: 'p-1',
+      projectId: '11111111-1111-1111-1111-111111111111',
       documentName: 'Helix Auditorium Floor Plan.dwg',
       description: 'Main auditorium layout seating configurations.',
       changelog: 'Adjusted HVAC secondary ducts loop routing per structural feedback.',
       fileUrl: '/drawings/helix_auditorium_v3.jpg',
       fileSize: 15200000,
-      uploadedBy: 'u-5' // Liam
+      uploadedBy: '00000000-0000-0000-0000-000000000005' // Liam
     });
     alert("Simulation complete: Liam Chen uploaded Auditorium Plan version 3. Seniors and Principals notified!");
   };
 
   const simulateSeniorProposal = () => {
-    // Find v1.1.0 (ver-2) and simulate Elena (Senior, u-3) creating a review with 2 proposed changes
+    // Find v1.0.0 (vvvvvvvv-vvvv-vvvv-vvvv-vvvvvvvvvv01) and simulate Elena (Senior, u-3) creating a review with 2 proposed changes
     db.addReview({
-      versionId: 'ver-2',
-      reviewerId: 'u-3', // Elena
+      versionId: 'vvvvvvvv-vvvv-vvvv-vvvv-vvvvvvvvvv01',
+      reviewerId: '00000000-0000-0000-0000-000000000003', // Elena
       comments: 'Duct clearings around fire corridors look narrow. Need to shift cable trays 100mm south.',
       proposedChanges: [
         { description: 'Shift duct cable tray loop 100mm south of fire corridor 2B grid joint.', x: 62.5, y: 55.4 }
       ]
     });
-    alert("Simulation complete: Elena Rostova submitted a review on Auditorium Plan v1.1.0 with 1 proposed change. Uploader and Principal notified!");
+    alert("Simulation complete: Elena Rostova submitted a review on Auditorium Plan v1.0.0 with 1 proposed change. Uploader and Principal notified!");
   };
 
   const simulateClientRequest = () => {
     // Add activity log and project notification about a client-led project change
     db.addActivityLog({
-      project_id: 'p-1',
-      user_id: 'u-6', // Admin/System
+      project_id: '11111111-1111-1111-1111-111111111111',
+      user_id: '00000000-0000-0000-0000-000000000006', // Admin/System
       action: 'client_update',
       details: 'Client requested Helix auditorium seating configuration revisions to increase capacity by 50.'
     });
 
     db.addNotification({
-      user_id: 'u-1', // Principal
+      user_id: '00000000-0000-0000-0000-000000000001', // Principal
       sender_id: null,
       type: 'project_update',
       title: 'Client request: Helix Project scope change',
       message: 'The client requests Helix auditorium seating capacity expansion. Review Floor plans.',
-      metadata: { project_id: 'p-1' }
+      metadata: { project_id: '11111111-1111-1111-1111-111111111111' }
     });
 
     alert("Simulation complete: Client request logged. Principal notified!");

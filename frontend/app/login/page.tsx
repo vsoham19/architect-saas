@@ -10,6 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { allUsers, login, loginByEmail, isInitialized, initialize } = useAuthStore();
   const [email, setEmail] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'junior' | 'senior' | 'principal'>('junior');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -26,7 +27,7 @@ export default function LoginPage() {
     setErrorMessage('');
 
     try {
-      const success = await loginByEmail(email);
+      const success = await loginByEmail(email, selectedRole);
       if (success) {
         router.push('/dashboard');
       } else {
@@ -141,8 +142,23 @@ export default function LoginPage() {
                 />
               </div>
               <p className="text-[10px] text-slate-400 mt-2 font-medium">
-                * Input any email address. New emails will automatically create a new Junior Architect account.
+                * Input any email address. New emails will automatically create a new account with the selected role.
               </p>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono mb-2">
+                CHOOSE ROLE (FOR NEW ACCOUNTS)
+              </label>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as any)}
+                className="w-full bg-[#f8fafc] border border-slate-200 rounded-2xl px-4 py-3 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-blue-600 focus:border-blue-600 focus:outline-none transition-all cursor-pointer"
+              >
+                <option value="junior">Junior Architect</option>
+                <option value="senior">Senior Lead Architect</option>
+                <option value="principal">Principal Architect / Studio Lead</option>
+              </select>
             </div>
 
             {errorMessage && (

@@ -7,14 +7,24 @@ interface AuthState {
   allUsers: User[];
   isInitialized: boolean;
   login: (userId: string) => void;
-  loginByEmail: (email: string) => Promise<boolean>;
+  loginByEmail: (email: string, selectedRole?: UserRole) => Promise<boolean>;
   logout: () => void;
   switchRole: (role: UserRole) => void;
   initialize: () => Promise<void>;
 }
 
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-const API_URL = rawApiUrl.replace(/\/$/, '');
+const getApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const hn = window.location.hostname;
+    if (hn === 'localhost' || hn === '127.0.0.1' || hn === '[::1]' || hn.startsWith('192.168.') || hn.startsWith('10.') || hn.startsWith('172.')) {
+      return 'http://localhost:5000';
+    }
+  }
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  return rawApiUrl.replace(/\/$/, '');
+};
+const API_URL = getApiUrl();
+
 
 const mapDbUser = (dbUser: any): User => ({
   id: dbUser.id,
@@ -39,7 +49,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  loginByEmail: async (email: string) => {
+  loginByEmail: async (email: string, selectedRole: UserRole = 'junior') => {
     try {
       const cleanEmail = email.trim().toLowerCase();
       if (!cleanEmail) return false;
@@ -77,8 +87,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         id: newUserId,
         email: cleanEmail,
         full_name: fullName,
-        system_role: 'junior',
-        avatar_url: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150` // default user icon
+        system_role: selectedRole,
+        avatar_url: selectedRole === 'principal'
+          ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'
+          : selectedRole === 'senior'
+          ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'
+          : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
       };
 
       const insertRes = await fetch(`${API_URL}/api/users`, {

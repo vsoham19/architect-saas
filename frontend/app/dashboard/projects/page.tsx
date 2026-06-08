@@ -35,17 +35,23 @@ export default function ProjectsPage() {
     e.preventDefault();
     if (!projectName || !teamName) return;
 
+    const users = useAuthStore.getState().allUsers;
+    const principalUser = users.find(u => u.role === 'principal') || currentUser;
+    const seniorUser = users.find(u => u.role === 'senior');
+    const juniorUser = users.find(u => u.role === 'junior');
+
+    const assignedUsers: { userId: string; role: any }[] = [];
+    if (principalUser) assignedUsers.push({ userId: principalUser.id, role: 'principal' });
+    if (seniorUser) assignedUsers.push({ userId: seniorUser.id, role: 'senior' });
+    if (juniorUser) assignedUsers.push({ userId: juniorUser.id, role: 'junior' });
+
     createProject({
       name: projectName,
       description: projectDesc,
       status: 'ongoing',
-      createdBy: currentUser?.id || 'u-1',
+      createdBy: currentUser?.id || principalUser?.id || '00000000-0000-0000-0000-000000000001',
       teamName,
-      assignedUsers: [
-        { userId: 'u-1', role: 'principal' },
-        { userId: 'u-2', role: 'senior' },
-        { userId: 'u-4', role: 'junior' }
-      ]
+      assignedUsers
     });
 
     setProjectName('');

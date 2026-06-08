@@ -69,7 +69,7 @@ export default function TaskBoardPage() {
       assignedJuniorId: taskJunior || null,
       assignedSeniorId: taskSenior || null,
       dueDate: new Date(taskDueDate).toISOString(),
-      creatorId: currentUser?.id || 'u-1'
+      creatorId: currentUser?.id || '00000000-0000-0000-0000-000000000001'
     });
 
     setTaskTitle('');
@@ -380,7 +380,7 @@ export default function TaskBoardPage() {
                     <select
                       value={selectedTask.status}
                       onChange={(e) => {
-                        updateTaskStatus(selectedTask.id, e.target.value as any, currentUser?.id || 'u-1');
+                        updateTaskStatus(selectedTask.id, e.target.value as any, currentUser?.id || '00000000-0000-0000-0000-000000000001');
                         // Update current drawer task status representation
                         setSelectedTask({ ...selectedTask, status: e.target.value as any });
                       }}
@@ -486,7 +486,7 @@ export default function TaskBoardPage() {
                   <button
                     onClick={() => {
                       if (confirm("Delete this task permanently?")) {
-                        deleteTask(selectedTask.id, currentUser?.id || 'u-1');
+                        deleteTask(selectedTask.id, currentUser?.id || '00000000-0000-0000-0000-000000000001');
                         setSelectedTask(null);
                       }
                     }}

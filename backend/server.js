@@ -11,6 +11,8 @@ import taskRoutes from './src/routes/taskRoutes.js';
 import documentRoutes from './src/routes/documentRoutes.js';
 import notificationRoutes from './src/routes/notificationRoutes.js';
 import auditRoutes from './src/routes/auditRoutes.js';
+import aiRoutes from './src/routes/aiRoutes.js';
+import canvasRoutes from './src/routes/canvasRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +30,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Base health routes
 app.get('/', (req, res) => {
@@ -52,6 +55,8 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/canvas', canvasRoutes);
 
 // Error Handling Middleware
 app.use(errorHandler);
