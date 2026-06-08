@@ -47,6 +47,7 @@ export interface Task {
   assigned_senior_id: string | null;
   due_date: string;
   status: TaskStatus;
+  attached_version_id?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -29,3 +29,28 @@ export const createUser = async (req, res, next) => {
     next(err);
   }
 };
+
+export const updateUserRole = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { system_role } = req.body;
+
+    const validRoles = ['admin', 'principal', 'senior', 'junior'];
+    if (!validRoles.includes(system_role)) {
+      return res.status(400).json({ status: "error", message: "Invalid system role" });
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ system_role })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};
+

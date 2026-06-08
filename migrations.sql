@@ -58,3 +58,6 @@ CREATE TABLE IF NOT EXISTS canvas_pins (
 ALTER TABLE drawing_elements DISABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_diff_log DISABLE ROW LEVEL SECURITY;
 ALTER TABLE canvas_pins DISABLE ROW LEVEL SECURITY;
+
+-- 6. Add attached_version_id column to tasks table for Junior deliverables
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS attached_version_id UUID REFERENCES doc_versions(id) ON DELETE SET NULL;

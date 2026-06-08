@@ -316,3 +316,61 @@ export const updateVersionDrawingData = async (req, res, next) => {
     next(err);
   }
 };
+
+export const backtrackDocApproval = async (req, res, next) => {
+  try {
+    const { versionId } = req.params;
+    const { userId } = req.body;
+
+    // Find the approval record first
+    const { data: approval, error: findErr } = await supabase
+      .from('doc_approvals')
+      .select('id, document_id')
+      .eq('version_id', versionId)
+      .single();
+
+    if (findErr) {
+      if (findErr.code === 'PGRST116') {
+        return res.status(404).json({ status: "error", message: "Approval not found" });
+      }
+      throw findErr;
+    }
+
+    // Find all tagged tasks for this approval
+    const { data: tags, error: tagsErr } = await supabase
+      .from('approval_task_tags')
+      .select('task_id')
+      .eq('approval_id', approval.id);
+
+    if (tagsErr) throw tagsErr;
+
+    // Delete the approval (will cascade delete approval_task_tags if cascade configured, or we delete explicitly)
+    // We'll delete approval_task_tags explicitly first to be absolutely safe
+    await supabase
+      .from('approval_task_tags')
+      .delete()
+      .eq('approval_id', approval.id);
+
+    const { error: deleteErr } = await supabase
+      .from('doc_approvals')
+      .delete()
+      .eq('id', approval.id);
+
+    if (deleteErr) throw deleteErr;
+
+    // Revert associated tasks status back to 'pending'
+    if (tags && tags.length > 0) {
+      const taskIds = tags.map(t => t.task_id);
+      const { error: tasksErr } = await supabase
+        .from('tasks')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .in('id', taskIds);
+
+      if (tasksErr) throw tasksErr;
+    }
+
+    res.status(200).json({ status: "success", message: "Document approval backtracked successfully" });
+  } catch (err) {
+    next(err);
+  }
+};

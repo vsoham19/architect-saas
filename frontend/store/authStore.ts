@@ -11,6 +11,7 @@ interface AuthState {
   logout: () => void;
   switchRole: (role: UserRole) => void;
   initialize: () => Promise<void>;
+  updateUserRole: (userId: string, role: UserRole) => Promise<boolean>;
 }
 
 const getApiUrl = () => {
@@ -158,6 +159,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error("Failed to initialize auth from Backend", e);
     } finally {
       set({ isInitialized: true });
+    }
+  },
+
+  updateUserRole: async (userId: string, role: UserRole) => {
+    try {
+      const res = await fetch(`${API_URL}/api/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system_role: role })
+      });
+
+      if (!res.ok) {
+        console.error("Failed to update user role on backend", res.statusText);
+        return false;
+      }
+
+      const { data: updatedDbUser } = await res.json();
+      if (!updatedDbUser) return false;
+
+      const updatedUser: User = {
+        id: updatedDbUser.id,
+        email: updatedDbUser.email,
+        name: updatedDbUser.full_name,
+        role: updatedDbUser.system_role as UserRole,
+        avatar_url: updatedDbUser.avatar_url || undefined,
+        created_at: updatedDbUser.created_at
+      };
+
+      set((state) => {
+        const updatedUsers = state.allUsers.map((u) => u.id === userId ? updatedUser : u);
+        const isSelf = state.currentUser?.id === userId;
+        return {
+          allUsers: updatedUsers,
+          currentUser: isSelf ? updatedUser : state.currentUser,
+          currentRole: isSelf ? updatedUser.role : state.currentRole
+        };
+      });
+
+      return true;
+    } catch (e) {
+      console.error("Failed to update user role", e);
+      return false;
     }
   },
 }));

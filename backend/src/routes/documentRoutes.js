@@ -5,7 +5,8 @@ import {
   getDocReviews, createDocReview,
   getDocApprovals, createDocApproval,
   getApprovalTaskTags, createApprovalTaskTags,
-  uploadDrawing, updateVersionDrawingData
+  uploadDrawing, updateVersionDrawingData,
+  backtrackDocApproval
 } from '../controllers/documentController.js';
 
 const router = express.Router();
@@ -28,6 +29,7 @@ router.post('/reviews', createDocReview);
 // Approvals
 router.get('/approvals', getDocApprovals);
 router.post('/approvals', createDocApproval);
+router.post('/approvals/:versionId/backtrack', backtrackDocApproval);
 
 // Tags
 router.get('/tags', getApprovalTaskTags);

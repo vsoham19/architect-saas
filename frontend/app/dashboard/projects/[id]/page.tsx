@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useDBStore } from '../../../../store/dbStore';
 import { useAuthStore } from '../../../../store/authStore';
@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 export default function ProjectDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const projectId = params.id as string;
 
   const { currentUser, currentRole } = useAuthStore();
@@ -24,6 +25,26 @@ export default function ProjectDetailsPage() {
   } = useDBStore();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'tasks' | 'team' | 'history'>('overview');
+
+  React.useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    const openUploadParam = searchParams.get('openUpload');
+    const taskIdParam = searchParams.get('taskId');
+
+    if (tabParam === 'documents') {
+      setActiveTab('documents');
+    }
+    if (openUploadParam === 'true') {
+      setShowDocModal(true);
+      if (taskIdParam) {
+        const task = tasks.find(t => t.id === taskIdParam);
+        if (task) {
+          setDocName(`${task.title} Drawing.dwg`);
+          setDocDesc(`Deliverable drawing for task: ${task.title}`);
+        }
+      }
+    }
+  }, [searchParams, tasks]);
 
   // Modal / Form States
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -93,11 +114,13 @@ export default function ProjectDetailsPage() {
   };
 
   // Handle Doc Submit
-  const handleDocSubmit = (e: React.FormEvent) => {
+  const handleDocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!docName) return;
 
-    uploadDocumentVersion({
+    const taskIdParam = searchParams.get('taskId');
+
+    const result = await uploadDocumentVersion({
       projectId,
       documentName: docName,
       description: docDesc,
@@ -107,10 +130,49 @@ export default function ProjectDetailsPage() {
       uploadedBy: currentUser?.id || '00000000-0000-0000-0000-000000000001'
     });
 
+    if (result && result.ver && taskIdParam) {
+      // 1. Link new drawing version to the task
+      await useDBStore.getState().updateTaskFields(taskIdParam, {
+        attached_version_id: result.ver.id,
+        status: 'review'
+      });
+
+      // 2. Notify the senior supervisor and principal
+      const task = tasks.find(t => t.id === taskIdParam);
+      const projMembers = teamMembers.filter(tm => tm.team_id === `team-${projectId}`);
+      projMembers.forEach(m => {
+        if (m.user_id !== currentUser?.id && (m.role === 'senior' || m.role === 'principal')) {
+          useDBStore.getState().addNotification({
+            user_id: m.user_id,
+            sender_id: currentUser?.id || null,
+            type: 'approval_required',
+            title: 'Task Drawing uploaded in Vault',
+            message: `A new version of drawing for task "${task?.title || 'Task'}" has been uploaded to the Vault by ${currentUser?.name || 'Junior'}. Comment: "${changelog || 'No comments'}"`,
+            metadata: { project_id: projectId, task_id: taskIdParam, document_id: result.doc.id, version_id: result.ver.id }
+          });
+        }
+      });
+
+      // Trigger activity log in DB store
+      useDBStore.getState().addActivityLog({
+        project_id: projectId,
+        user_id: currentUser?.id || '',
+        action: 'task_upload',
+        details: `Uploaded deliverable drawing in vault for task "${task?.title || 'Task'}": "${changelog || 'No comment'}"`
+      });
+
+      alert("Drawing uploaded to Vault and task submitted for review successfully!");
+    } else {
+      alert("Drawing uploaded to Vault successfully!");
+    }
+
     setDocName('');
     setDocDesc('');
     setChangelog('');
     setShowDocModal(false);
+
+    // Clean up query parameters from the URL
+    router.replace(`/dashboard/projects/${projectId}?tab=documents`);
   };
 
   const getStatusColor = (status: string) => {
@@ -163,6 +225,17 @@ export default function ProjectDetailsPage() {
               <option value="completed">Completed</option>
               <option value="archived">Archived</option>
             </select>
+            <button
+              type="button"
+              onClick={async () => {
+                // Delete immediately on click without confirmation
+                await useDBStore.getState().deleteProject(projectId, currentUser?.id || '');
+                router.push('/dashboard/projects');
+              }}
+              className="px-4 py-2 border border-rose-500/30 bg-rose-500/10 text-rose-450 hover:bg-rose-500/20 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              Delete Project
+            </button>
           </div>
         )}
       </div>
@@ -614,13 +687,38 @@ export default function ProjectDetailsPage() {
             <h3 className="text-md font-bold text-foreground mb-4">Upload Design Drawing</h3>
             <form onSubmit={handleDocSubmit} className="space-y-4 text-xs font-semibold text-foreground">
               <div>
+                <label className="block text-[11px] text-muted-foreground mb-1">Select Blueprint File</label>
+                <div className="border border-dashed border-border rounded-xl p-4 text-center hover:bg-secondary/35 transition-colors cursor-pointer relative bg-secondary/10">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    required={!docName}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setDocName(file.name);
+                        if (!docDesc) {
+                          setDocDesc(`Deliverable drawing for ${file.name}`);
+                        }
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  <Upload className="mx-auto text-muted-foreground mb-1.5" size={16} />
+                  <span className="text-[10px] text-muted-foreground block font-mono">
+                    {docName ? `Selected: ${docName}` : 'Click to choose drawing blueprint image'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-[11px] text-muted-foreground mb-1">Drawing Filename</label>
                 <input
                   type="text"
                   required
                   value={docName}
                   onChange={(e) => setDocName(e.target.value)}
-                  placeholder="e.g. Auditorium Section Grid.pdf"
+                  placeholder="e.g. Auditorium Section Grid.dwg"
                   className="w-full bg-secondary border border-border rounded-xl px-3 py-2 focus:ring-1 focus:ring-primary focus:outline-none text-foreground"
                 />
               </div>
@@ -637,12 +735,12 @@ export default function ProjectDetailsPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] text-muted-foreground mb-1">Revision Changelog</label>
-                <input
-                  type="text"
+                <label className="block text-[11px] text-muted-foreground mb-1">Revision Changelog / Comments (for Reviewers)</label>
+                <textarea
                   value={changelog}
                   onChange={(e) => setChangelog(e.target.value)}
-                  placeholder="e.g. Adjusted anchor dimensions at grid H-9"
+                  placeholder="e.g. Liam: Relocated fire doors. Senior and principal, please review!"
+                  rows={2}
                   className="w-full bg-secondary border border-border rounded-xl px-3 py-2 focus:ring-1 focus:ring-primary focus:outline-none text-foreground"
                 />
               </div>
@@ -659,7 +757,7 @@ export default function ProjectDetailsPage() {
                   type="submit"
                   className="px-4 py-2 bg-primary text-primary-foreground rounded-xl font-bold hover:bg-primary/95 shadow-md cursor-pointer"
                 >
-                  Upload Drawing
+                  Upload Drawing & Submit
                 </button>
               </div>
             </form>

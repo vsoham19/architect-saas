@@ -8,8 +8,7 @@ import { useDBStore } from '../store/dbStore';
 import NotificationCenter from './NotificationCenter';
 import { 
   Sparkles, ChevronDown, Award, Shield, Hammer, Wrench, Menu, X,
-  LayoutDashboard, FolderKanban, Users, CheckSquare, History, Settings, LogOut,
-  Link2
+  LayoutDashboard, FolderKanban, Users, CheckSquare, History, Settings, LogOut
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -103,12 +102,6 @@ export default function Navbar() {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-3">
-            {/* Quick Simulator indicator */}
-            <div className="hidden lg:flex items-center gap-1 px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
-              <Link2 size={11} className="text-blue-500" />
-              <span>Simulation Mode</span>
-            </div>
-
             {/* User Profile Switcher Dropdown */}
             <div className="relative flex items-center">
               <select

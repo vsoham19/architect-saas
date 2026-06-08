@@ -5,6 +5,7 @@ import {
   AuditLog, ActivityLog, ProjectStatus, TaskStatus, DocumentStatus,
   ProposedChange, UserRole, VersionStatus
 } from '../types';
+import { useAuthStore } from './authStore';
 
 interface DBState {
   projects: Project[];
@@ -76,6 +77,12 @@ interface DBState {
     taggedTaskIds: string[];
     confirmNoTasks: boolean;
   }) => Promise<DocumentApproval>;
+
+  // Newly added workflow actions
+  updateTaskFields: (taskId: string, fields: Partial<Task>) => Promise<void>;
+  backtrackApproval: (taskId: string, userId: string) => Promise<void>;
+  deleteProject: (projectId: string, userId: string) => Promise<void>;
+  backtrackDocumentApproval: (documentId: string, versionId: string, userId: string) => Promise<void>;
 
   // Notifications
   addNotification: (params: Omit<Notification, 'id' | 'created_at' | 'read'>) => Promise<void>;
@@ -284,7 +291,16 @@ export const useDBStore = create<DBState>((set, get) => ({
       const projects: Project[] = (dbProjects || []).map(mapProject);
       const teamMembers: TeamMember[] = (dbMembers || []).map(mapMember);
       const tasks: Task[] = (dbTasks || []).map(mapTask);
-      const documentVersions: DocumentVersion[] = (dbVersions || []).map(mapVersion);
+      const documentVersions: DocumentVersion[] = (dbVersions || []).map(mapVersion).map((ver) => {
+        const hasVerApproval = (dbApprovals || []).some((a: any) => a.version_id === ver.id);
+        const hasVerRejectedReview = (dbReviews || []).some((r: any) => r.version_id === ver.id && r.status === 'rejected');
+        
+        let status: VersionStatus = 'pending';
+        if (hasVerApproval) status = 'approved';
+        else if (hasVerRejectedReview) status = 'rejected';
+
+        return { ...ver, status };
+      });
       const documentReviews: DocumentReview[] = (dbReviews || []).map(mapReview);
       const documentApprovals: DocumentApproval[] = (dbApprovals || []).map(mapApproval);
       
@@ -513,6 +529,18 @@ export const useDBStore = create<DBState>((set, get) => ({
           metadata: { project_id: params.projectId, task_id: newTaskId }
         });
       }
+
+      if (params.assignedSeniorId) {
+        const juniorName = useAuthStore.getState().allUsers.find(u => u.id === params.assignedJuniorId)?.name || 'unassigned junior';
+        get().addNotification({
+          user_id: params.assignedSeniorId,
+          sender_id: params.creatorId,
+          type: 'task_updated',
+          title: 'Supervising role assigned',
+          message: `You have been assigned to supervise the task: "${params.title}" (assigned to ${juniorName}).`,
+          metadata: { project_id: params.projectId, task_id: newTaskId }
+        });
+      }
     } catch (e) {
       console.error("Failed to create task in Backend", e);
     }
@@ -587,6 +615,40 @@ export const useDBStore = create<DBState>((set, get) => ({
       });
     } catch (e) {
       console.error("Failed to delete task from Backend", e);
+    }
+  },
+
+  // New generic field update for tasks (used for image upload)
+  updateTaskFields: async (taskId, fields) => {
+    // Optimistic UI update
+    set((state) => ({
+      tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, ...fields, updated_at: new Date().toISOString() } : t))
+    }));
+    try {
+      await fetchJSON(`${API_URL}/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields)
+      });
+    } catch (e) {
+      console.error('Failed to patch task fields', e);
+    }
+  },
+
+  // Backtrack approval (principal only)
+  backtrackApproval: async (taskId, userId) => {
+    // Reset status locally
+    set((state) => ({
+      tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, status: 'pending', attached_version_id: null, updated_at: new Date().toISOString() } : t))
+    }));
+    try {
+      await fetchJSON(`${API_URL}/api/tasks/${taskId}/backtrack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+    } catch (e) {
+      console.error('Failed to backtrack approval', e);
     }
   },
 
@@ -1019,6 +1081,88 @@ export const useDBStore = create<DBState>((set, get) => ({
       });
     } catch (e) {
       console.error("Failed to write activity log to Backend", e);
+    }
+  },
+
+  deleteProject: async (projectId, userId) => {
+    // Revert local UI state
+    set((state) => ({
+      projects: state.projects.filter((p) => p.id !== projectId),
+      // Clean up team and members
+      teams: state.teams.filter((t) => t.project_id !== projectId),
+      teamMembers: state.teamMembers.filter((tm) => tm.team_id !== `team-${projectId}`),
+      // Clean up tasks
+      tasks: state.tasks.filter((t) => t.project_id !== projectId)
+    }));
+
+    try {
+      await fetchJSON(`${API_URL}/api/projects/${projectId}`, {
+        method: 'DELETE'
+      });
+
+      get().addAuditLog({
+        user_id: userId,
+        action: 'delete_project',
+        entity_type: 'project',
+        entity_id: projectId,
+        details: { projectId }
+      });
+    } catch (e) {
+      console.error('Failed to delete project', e);
+    }
+  },
+
+  backtrackDocumentApproval: async (documentId, versionId, userId) => {
+    // Revert status locally
+    set((state) => {
+      const updatedDocs = state.documents.map(d =>
+        d.id === documentId ? { ...d, status: 'pending_review' as DocumentStatus, updated_at: new Date().toISOString() } : d
+      );
+      const updatedVers = state.documentVersions.map(v =>
+        v.id === versionId ? { ...v, status: 'pending' as VersionStatus } : v
+      );
+
+      // Revert tagged tasks status back to 'pending'
+      const approval = state.documentApprovals.find(a => a.document_version_id === versionId);
+      const approvalId = approval?.id;
+      const taggedTaskIds = state.approvalTaskTags.filter(t => t.approval_id === approvalId).map(t => t.task_id);
+      
+      const updatedTasks = state.tasks.map(t => {
+        if (taggedTaskIds.includes(t.id)) {
+          return {
+            ...t,
+            status: 'pending' as TaskStatus,
+            updated_at: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+
+      return {
+        documents: updatedDocs,
+        documentVersions: updatedVers,
+        tasks: updatedTasks,
+        documentApprovals: state.documentApprovals.filter(a => a.document_version_id !== versionId),
+        approvalTaskTags: state.approvalTaskTags.filter(t => t.approval_id !== approvalId)
+      };
+    });
+
+    try {
+      await fetchJSON(`${API_URL}/api/documents/approvals/${versionId}/backtrack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+
+      get().addAuditLog({
+        user_id: userId,
+        action: 'backtrack_approval',
+        entity_type: 'document',
+        entity_id: documentId,
+        details: { versionId }
+      });
+    } catch (e) {
+      console.error('Failed to backtrack document approval', e);
     }
   }
 }));

@@ -30,6 +30,7 @@ export default function DocumentWorkspacePage() {
   const router = useRouter();
   const docId = params.id as string;
   const versionQueryId = searchParams.get('version');
+  const compareQueryId = searchParams.get('compare');
 
   useEffect(() => {
     console.log("[Workspace] Using API URL:", getApiUrl());
@@ -39,7 +40,7 @@ export default function DocumentWorkspacePage() {
   const { currentUser, currentRole, allUsers: allUsersList } = useAuthStore();
   const { 
     documents, documentVersions, documentReviews, tasks, 
-    addReview, approveDocument, projects 
+    addReview, approveDocument, projects, backtrackDocumentApproval
   } = useDBStore();
 
   // Document state
@@ -385,6 +386,13 @@ export default function DocumentWorkspacePage() {
         const found = docVersions.find(v => v.id === versionQueryId);
         if (found) {
           setActiveVersion(found);
+          if (compareQueryId) {
+            const compFound = docVersions.find(v => v.id === compareQueryId);
+            if (compFound) {
+              setCompareVersion(compFound);
+              setIsCompareMode(true);
+            }
+          }
           return;
         }
       }
@@ -392,7 +400,7 @@ export default function DocumentWorkspacePage() {
       const current = docVersions.find(v => v.id === doc?.current_version_id);
       setActiveVersion(current || docVersions[docVersions.length - 1]);
     }
-  }, [docId, versionQueryId, doc, docVersions.length]);
+  }, [docId, versionQueryId, compareQueryId, doc, docVersions.length]);
 
   // Fetch canvas pins on version selection
   useEffect(() => {
@@ -768,7 +776,16 @@ export default function DocumentWorkspacePage() {
   };
 
   // Lock logic
-  const isApprovalButtonLocked = taggedTasksList.length === 0 && !confirmNoTasks;
+  const activeVersionUploadedBySenior = activeVersion 
+    ? allUsersList.find(u => u.id === activeVersion.uploaded_by)?.role === 'senior'
+    : false;
+  
+  const isValidatedBySenior = reviews.some(r => {
+    const reviewer = allUsersList.find(u => u.id === r.reviewer_id);
+    return reviewer?.role === 'senior' && r.proposed_changes.length === 0;
+  }) || activeVersionUploadedBySenior;
+
+  const isApprovalButtonLocked = (taggedTasksList.length === 0 && !confirmNoTasks) || !isValidatedBySenior;
 
   return (
     <div className="space-y-6 select-none pb-20">
@@ -1555,6 +1572,13 @@ export default function DocumentWorkspacePage() {
                 </span>
               </div>
 
+              {!isValidatedBySenior && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-250 text-amber-705 text-[10px] font-bold flex items-start gap-1.5 leading-normal">
+                  <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                  <span>Awaiting Senior/Supervisor validation. A Senior must submit an approved review for this version first.</span>
+                </div>
+              )}
+
               {errorMsg && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold flex items-start gap-1.5">
                   <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
@@ -1654,6 +1678,20 @@ export default function DocumentWorkspacePage() {
               <p className="text-[11px] text-emerald-600 leading-relaxed font-semibold">
                 This drawing version has been formally approved and locked by Principal Sarah. Revision logs and notification tasks have been distributed.
               </p>
+              {(currentRole === 'principal' || currentRole === 'admin') && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (activeVersion) {
+                      await backtrackDocumentApproval(doc.id, activeVersion.id, currentUser?.id || '');
+                      alert("Approval backtracked successfully! Drawing is now pending review.");
+                    }
+                  }}
+                  className="w-full mt-2 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-md transition-all text-center"
+                >
+                  Undo Approval (Backtrack)
+                </button>
+              )}
             </div>
           )}
         </div>

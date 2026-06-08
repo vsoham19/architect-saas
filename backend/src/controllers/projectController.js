@@ -94,3 +94,18 @@ export const assignProjectMembers = async (req, res, next) => {
     next(err);
   }
 };
+
+export const deleteProject = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    res.status(200).json({ status: "success", message: "Project deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+};

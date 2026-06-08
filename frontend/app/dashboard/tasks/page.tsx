@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useDBStore } from '../../../store/dbStore';
 import { useAuthStore } from '../../../store/authStore';
 import { 
@@ -9,10 +10,20 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Task, TaskStatus } from '../../../types';
-
+const getApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    const hn = window.location.hostname;
+    if (hn === 'localhost' || hn === '127.0.0.1' || hn === '[::1]' || hn.startsWith('192.168.') || hn.startsWith('10.') || hn.startsWith('172.')) {
+      return 'http://localhost:5000';
+    }
+  }
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  return rawApiUrl.replace(/\/$/, '');
+};
+const API_URL = getApiUrl();
 export default function TaskBoardPage() {
   const { currentRole, currentUser } = useAuthStore();
-  const { tasks, projects, createTask, updateTaskStatus, deleteTask } = useDBStore();
+  const { tasks, projects, documents, documentVersions, createTask, updateTaskStatus, deleteTask } = useDBStore();
 
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [projectFilter, setProjectFilter] = useState('all');
@@ -108,7 +119,7 @@ export default function TaskBoardPage() {
     setNewCommentText('');
   };
 
-  const getRelativeTime = (isoString: string) => {
+    const getRelativeTime = (isoString: string) => {
     return new Date(isoString).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
   };
 
@@ -249,6 +260,43 @@ export default function TaskBoardPage() {
                             )}
                             <span className="text-slate-400 truncate max-w-[70px]">{junior?.name || 'Unassigned'}</span>
                           </div>
+
+                          {/* Upload button for junior */}
+                          {currentRole === 'junior' && task.assigned_junior_id === currentUser?.id && (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                id={`upload-${task.id}`}
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const formData = new FormData();
+                                  formData.append('file', file);
+                                  try {
+                                    const res = await fetch(`${API_URL}/api/tasks/${task.id}/upload`, {
+                                      method: 'POST',
+                                      body: formData,
+                                    });
+                                    const data = await res.json();
+                                    if (res.ok && data.attached_version_id) {
+                                      // Update task with attached version and set status to review
+                                      useDBStore.getState().updateTaskFields(task.id, {
+                                        attached_version_id: data.attached_version_id,
+                                        status: 'review',
+                                      });
+                                    }
+                                  } catch (err) {
+                                    console.error('Upload failed', err);
+                                  }
+                                }}
+                              />
+                              <label htmlFor={`upload-${task.id}`} className="cursor-pointer text-xs text-blue-600 hover:underline">
+                                Upload Image
+                              </label>
+                            </div>
+                          )}
 
                           {/* Info */}
                           <div className="flex items-center gap-2">
@@ -425,16 +473,76 @@ export default function TaskBoardPage() {
                   </p>
                 </div>
 
-                {/* Attachments Mockup */}
-                <div>
-                  <label className="block text-[10px] uppercase text-slate-500 mb-2">Attachments</label>
-                  <div className="p-3 border border-border/50 bg-secondary/10 rounded-xl flex items-center justify-between text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Paperclip size={14} className="text-indigo-400" />
-                      <span>Helix_auditorium_layout_spec.pdf</span>
+                {/* Deliverable Section */}
+                <div className="space-y-3">
+                  <label className="block text-[10px] uppercase text-slate-500 font-extrabold tracking-wider">Deliverable Drawing</label>
+                  
+                  {selectedTask.attached_version_id ? (() => {
+                    const attachedVersion = documentVersions.find(v => v.id === selectedTask.attached_version_id);
+                    const attachedDoc = documents.find(d => d.id === attachedVersion?.document_id);
+                    
+                    const tag = useDBStore.getState().approvalTaskTags.find(t => t.task_id === selectedTask.id);
+                    const appRecord = useDBStore.getState().documentApprovals.find(a => a.id === tag?.approval_id);
+                    const oldVersionId = appRecord?.document_version_id;
+                    const oldVer = documentVersions.find(v => v.id === oldVersionId);
+                    
+                    return (
+                      <div className="p-4 rounded-2xl border border-border bg-slate-50/50 space-y-3 text-xs">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-extrabold text-slate-800 uppercase block tracking-wider text-[10px]">
+                              {attachedDoc?.name || 'Attached Drawing'}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground mt-0.5 inline-block font-mono">
+                              REV: {attachedVersion?.version_number} // {attachedVersion ? (attachedVersion.file_size / 1024 / 1024).toFixed(1) : '0'} MB
+                            </span>
+                          </div>
+                          <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border text-amber-700 bg-amber-50 border-amber-200">
+                            {attachedVersion?.status || 'pending'}
+                          </span>
+                        </div>
+
+                        {attachedVersion?.changelog && (
+                          <p className="text-[10px] text-slate-500 italic bg-white p-2 rounded-lg border border-border/40">
+                            Changelog: {attachedVersion.changelog}
+                          </p>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                          {attachedDoc && (
+                            <Link
+                              href={`/dashboard/workspace/${attachedDoc.id}?version=${attachedVersion.id}`}
+                              className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-center text-[10px] uppercase tracking-wider transition-all border border-indigo-200/50"
+                            >
+                              Open Workspace
+                            </Link>
+                          )}
+                          {attachedDoc && oldVer && (
+                            <Link
+                              href={`/dashboard/workspace/${attachedDoc.id}?version=${attachedVersion.id}&compare=${oldVer.id}`}
+                              className="flex-1 py-2 bg-blue-600 hover:bg-blue-750 text-white font-bold rounded-xl text-center text-[10px] uppercase tracking-wider transition-all shadow-sm"
+                            >
+                              Compare Slider (vs {oldVer.version_number})
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })() : (
+                    <p className="text-slate-450 italic text-[11px]">No deliverable drawings uploaded yet.</p>
+                  )}
+
+                  {/* Redirect link to Design Vault for upload */}
+                  {(currentUser?.id === selectedTask.assigned_junior_id || currentUser?.id === selectedTask.assigned_senior_id) && (
+                    <div className="pt-2">
+                      <Link
+                        href={`/dashboard/projects/${selectedTask.project_id}?tab=documents&openUpload=true&taskId=${selectedTask.id}`}
+                        className="w-full py-2 border-2 border-dashed border-indigo-250 bg-indigo-50/10 text-indigo-650 hover:bg-indigo-50/30 font-bold rounded-xl text-center text-[11px] uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        + Upload Deliverable in Design Vault
+                      </Link>
                     </div>
-                    <span className="text-[9px] font-mono">1.8 MB</span>
-                  </div>
+                  )}
                 </div>
 
                 {/* Comments Header */}
