@@ -61,6 +61,10 @@ app.use('/api/canvas', canvasRoutes);
 // Error Handling Middleware
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`SaaS ERP Backend server running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`SaaS ERP Backend server running on port ${PORT}`);
+  });
+}
+
+export default app;
