@@ -1,9 +1,5 @@
 import { supabase } from '../db/supabase.js';
-import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
-
-// Multer setup for file uploads
-const upload = multer({ dest: 'uploads/' });
 
 export const uploadTaskImage = async (req, res, next) => {
   try {
