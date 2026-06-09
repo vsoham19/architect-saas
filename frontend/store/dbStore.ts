@@ -291,7 +291,7 @@ export const useDBStore = create<DBState>((set, get) => ({
       const projects: Project[] = (dbProjects || []).map(mapProject);
       const teamMembers: TeamMember[] = (dbMembers || []).map(mapMember);
       const tasks: Task[] = (dbTasks || []).map(mapTask);
-      const documentVersions: DocumentVersion[] = (dbVersions || []).map(mapVersion).map((ver) => {
+      const documentVersions: DocumentVersion[] = (dbVersions || []).map(mapVersion).map((ver: DocumentVersion) => {
         const hasVerApproval = (dbApprovals || []).some((a: any) => a.version_id === ver.id);
         const hasVerRejectedReview = (dbReviews || []).some((r: any) => r.version_id === ver.id && r.status === 'rejected');
         

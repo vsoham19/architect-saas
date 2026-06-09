@@ -1226,7 +1226,7 @@ export default function DocumentWorkspacePage() {
                         key={pin.id}
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        onClick={(e) => {
+                        onClick={(e: React.MouseEvent) => {
                           e.stopPropagation();
                           setSelectedChangePin(pin);
                           setShowAddChangeForm(false);

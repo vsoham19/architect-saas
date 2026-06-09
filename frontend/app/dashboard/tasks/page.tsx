@@ -509,7 +509,7 @@ export default function TaskBoardPage() {
                         )}
 
                         <div className="flex gap-2 pt-1">
-                          {attachedDoc && (
+                          {attachedDoc && attachedVersion && (
                             <Link
                               href={`/dashboard/workspace/${attachedDoc.id}?version=${attachedVersion.id}`}
                               className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-center text-[10px] uppercase tracking-wider transition-all border border-indigo-200/50"
@@ -517,7 +517,7 @@ export default function TaskBoardPage() {
                               Open Workspace
                             </Link>
                           )}
-                          {attachedDoc && oldVer && (
+                          {attachedDoc && attachedVersion && oldVer && (
                             <Link
                               href={`/dashboard/workspace/${attachedDoc.id}?version=${attachedVersion.id}&compare=${oldVer.id}`}
                               className="flex-1 py-2 bg-blue-600 hover:bg-blue-750 text-white font-bold rounded-xl text-center text-[10px] uppercase tracking-wider transition-all shadow-sm"
