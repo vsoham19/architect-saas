@@ -172,7 +172,11 @@ export default function DocumentWorkspacePage() {
   // Resolve a file_url to a fully-qualified src with optional cache-busting
   const resolveImageSrc = (fileUrl: string | undefined | null, bustCache = false): string => {
     if (!fileUrl) return '';
-    const base = fileUrl.startsWith('http') || fileUrl.startsWith('/') ? fileUrl : `${getApiUrl()}${fileUrl}`;
+    if (fileUrl.startsWith('http')) {
+      return bustCache ? `${fileUrl}?t=${imageKey}` : fileUrl;
+    }
+    const cleanUrl = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+    const base = `${getApiUrl()}${cleanUrl}`;
     return bustCache ? `${base}?t=${imageKey}` : base;
   };
 

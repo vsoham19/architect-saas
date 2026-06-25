@@ -58,6 +58,10 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/canvas', canvasRoutes);
 
+// Serve drawings statically (both uploaded and seeded files)
+const drawingsDir = path.resolve(__dirname, '../frontend/public/drawings');
+app.use('/drawings', express.static(drawingsDir));
+
 // Error Handling Middleware
 app.use(errorHandler);
 
