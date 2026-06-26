@@ -169,6 +169,10 @@ export default function DocumentWorkspacePage() {
   // Incremented after each upload to force img elements to reload (cache-bust)
   const [imageKey, setImageKey] = useState(0);
 
+  const [isEditingFsi, setIsEditingFsi] = useState(false);
+  const [tempBuiltUpArea, setTempBuiltUpArea] = useState('');
+  const [tempPlotArea, setTempPlotArea] = useState('');
+
   // Resolve a file_url to a fully-qualified src with optional cache-busting
   const resolveImageSrc = (fileUrl: string | undefined | null, bustCache = false): string => {
     if (!fileUrl) return '';
@@ -510,6 +514,18 @@ export default function DocumentWorkspacePage() {
   const proj = projects.find(p => p.id === doc.project_id);
   const projTasks = tasks.filter(t => t.project_id === doc.project_id);
 
+  useEffect(() => {
+    if (activeVersion) {
+      setTempBuiltUpArea(activeVersion.built_up_area?.toString() || '0');
+    }
+  }, [activeVersion?.id, activeVersion?.built_up_area]);
+
+  useEffect(() => {
+    if (proj) {
+      setTempPlotArea(proj.plot_area?.toString() || '10000');
+    }
+  }, [proj?.id, proj?.plot_area]);
+
   const handleContainerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isDraggingSlider) {
       const wrapper = document.getElementById('drawing-content-wrapper');
@@ -659,7 +675,9 @@ export default function DocumentWorkspacePage() {
   const fsiLimit = ZONE_LIMITS[zoneName] || 1.8;
   const plotArea = proj?.plot_area || 10000;
   const builtUpArea = activeVersion?.built_up_area || 0;
-  const computedFsi = plotArea > 0 ? Number((builtUpArea / plotArea).toFixed(2)) : 0;
+  const liveBuiltUp = isEditingFsi ? (Number(tempBuiltUpArea) || 0) : builtUpArea;
+  const livePlotArea = isEditingFsi ? (Number(tempPlotArea) || 0) : plotArea;
+  const computedFsi = livePlotArea > 0 ? Number((liveBuiltUp / livePlotArea).toFixed(2)) : 0;
   const fsiExceeded = computedFsi > fsiLimit;
 
   const isApprovalButtonLocked = (taggedTasksList.length === 0 && !confirmNoTasks) || !isValidatedBySenior || fsiExceeded;
@@ -1217,7 +1235,47 @@ export default function DocumentWorkspacePage() {
           {/* FSI Status indicator */}
           <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center justify-between">
-              <h3 className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground font-mono">FSI Index Status</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground font-mono">FSI Index Status</h3>
+                {isEditingFsi ? (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={async () => {
+                        if (activeVersion && proj) {
+                          try {
+                            await useDBStore.getState().updateVersionBuiltUpArea(activeVersion.id, Number(tempBuiltUpArea) || 0);
+                            await useDBStore.getState().updateProjectDetails(proj.id, proj.zone || 'R1', Number(tempPlotArea) || 0);
+                            setIsEditingFsi(false);
+                          } catch (err) {
+                            console.error(err);
+                            alert("Failed to save changes.");
+                          }
+                        }
+                      }}
+                      className="text-[8px] px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-bold hover:bg-primary/95 cursor-pointer uppercase transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingFsi(false);
+                        setTempBuiltUpArea(activeVersion?.built_up_area?.toString() || '0');
+                        setTempPlotArea(proj?.plot_area?.toString() || '10000');
+                      }}
+                      className="text-[8px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground hover:text-foreground font-bold cursor-pointer uppercase transition-colors border border-border"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsEditingFsi(true)}
+                    className="text-[8px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground hover:text-foreground font-bold cursor-pointer uppercase transition-colors border border-border"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
               <span className={`text-[8px] font-bold px-2 py-0.5 rounded font-mono ${fsiExceeded ? 'text-destructive bg-destructive/10 border border-destructive/20 animate-pulse' : 'text-emerald-500 bg-emerald-500/10 border border-emerald-500/20'}`}>
                 {fsiExceeded ? 'EXCEEDED' : 'COMPLIANT'}
               </span>
@@ -1238,13 +1296,39 @@ export default function DocumentWorkspacePage() {
                 </div>
               </div>
               <div className="space-y-2 text-[10px] font-semibold text-muted-foreground">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center h-6">
                   <span>Built-up Area:</span>
-                  <span className="text-foreground">{builtUpArea.toLocaleString()} sq ft</span>
+                  {isEditingFsi ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        value={tempBuiltUpArea}
+                        onChange={(e) => setTempBuiltUpArea(e.target.value)}
+                        className="w-20 px-2 py-1 bg-secondary text-foreground text-right border border-border rounded text-[10px] focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                        placeholder="Built-up"
+                      />
+                      <span className="text-[9px] text-muted-foreground/60">sq ft</span>
+                    </div>
+                  ) : (
+                    <span className="text-foreground">{builtUpArea.toLocaleString()} sq ft</span>
+                  )}
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center h-6">
                   <span>Plot Area:</span>
-                  <span className="text-foreground">{plotArea.toLocaleString()} sq ft</span>
+                  {isEditingFsi ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        value={tempPlotArea}
+                        onChange={(e) => setTempPlotArea(e.target.value)}
+                        className="w-20 px-2 py-1 bg-secondary text-foreground text-right border border-border rounded text-[10px] focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                        placeholder="Plot"
+                      />
+                      <span className="text-[9px] text-muted-foreground/60">sq ft</span>
+                    </div>
+                  ) : (
+                    <span className="text-foreground">{plotArea.toLocaleString()} sq ft</span>
+                  )}
                 </div>
               </div>
             </div>

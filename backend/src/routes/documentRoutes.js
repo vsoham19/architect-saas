@@ -6,7 +6,7 @@ import {
   getDocApprovals, createDocApproval,
   getApprovalTaskTags, createApprovalTaskTags,
   uploadDrawing, updateVersionDrawingData,
-  backtrackDocApproval
+  backtrackDocApproval, updateVersionDetails
 } from '../controllers/documentController.js';
 
 const router = express.Router();
@@ -21,6 +21,7 @@ router.post('/upload-drawing', uploadDrawing);
 router.get('/versions', getDocVersions);
 router.post('/versions', createDocVersion);
 router.patch('/versions/:id/drawing-data', updateVersionDrawingData);
+router.patch('/versions/:id', updateVersionDetails);
 
 // Reviews
 router.get('/reviews', getDocReviews);

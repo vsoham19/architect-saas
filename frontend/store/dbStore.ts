@@ -86,6 +86,8 @@ interface DBState {
   backtrackApproval: (taskId: string, userId: string) => Promise<void>;
   deleteProject: (projectId: string, userId: string) => Promise<void>;
   backtrackDocumentApproval: (documentId: string, versionId: string, userId: string) => Promise<void>;
+  updateProjectDetails: (projectId: string, zone: string, plotArea: number) => Promise<void>;
+  updateVersionBuiltUpArea: (versionId: string, builtUpArea: number) => Promise<void>;
 
   // Notifications
   addNotification: (params: Omit<Notification, 'id' | 'created_at' | 'read'>) => Promise<void>;
@@ -1554,6 +1556,36 @@ export const useDBStore = create<DBState>((set, get) => ({
       });
     } catch (e) {
       console.error('Failed to backtrack document approval', e);
+    }
+  },
+
+  updateProjectDetails: async (projectId, zone, plotArea) => {
+    set((state) => ({
+      projects: state.projects.map(p => p.id === projectId ? { ...p, zone, plot_area: plotArea } : p)
+    }));
+    try {
+      await fetchJSON(`${API_URL}/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zone, plot_area: plotArea })
+      });
+    } catch (e) {
+      console.error('Failed to update project details', e);
+    }
+  },
+
+  updateVersionBuiltUpArea: async (versionId, builtUpArea) => {
+    set((state) => ({
+      documentVersions: state.documentVersions.map(v => v.id === versionId ? { ...v, built_up_area: builtUpArea } : v)
+    }));
+    try {
+      await fetchJSON(`${API_URL}/api/documents/versions/${versionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ built_up_area: builtUpArea })
+      });
+    } catch (e) {
+      console.error('Failed to update version built-up area', e);
     }
   }
 }));

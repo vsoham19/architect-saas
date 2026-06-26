@@ -109,3 +109,26 @@ export const deleteProject = async (req, res, next) => {
     next(err);
   }
 };
+
+export const updateProjectDetails = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { zone, plot_area } = req.body;
+    
+    const updates = {};
+    if (zone !== undefined) updates.zone = zone;
+    if (plot_area !== undefined) updates.plot_area = Number(plot_area);
+    
+    const { data, error } = await supabase
+      .from('projects')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+      
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    next(err);
+  }
+};

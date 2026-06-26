@@ -382,3 +382,27 @@ export const backtrackDocApproval = async (req, res, next) => {
     next(err);
   }
 };
+
+export const updateVersionDetails = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { built_up_area, changelog, status } = req.body;
+    
+    const updates = {};
+    if (built_up_area !== undefined) updates.built_up_area = Number(built_up_area);
+    if (changelog !== undefined) updates.changelog = changelog;
+    if (status !== undefined) updates.status = status;
+    
+    const { data, error } = await supabase
+      .from('doc_versions')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+      
+    if (error) throw new Error(error.message || JSON.stringify(error));
+    res.status(200).json({ status: "success", success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
