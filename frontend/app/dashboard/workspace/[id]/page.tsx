@@ -172,7 +172,7 @@ export default function DocumentWorkspacePage() {
   // Resolve a file_url to a fully-qualified src with optional cache-busting
   const resolveImageSrc = (fileUrl: string | undefined | null, bustCache = false): string => {
     if (!fileUrl) return '';
-    if (fileUrl.startsWith('http')) {
+    if (fileUrl.startsWith('http') || fileUrl.startsWith('data:')) {
       return bustCache ? `${fileUrl}?t=${imageKey}` : fileUrl;
     }
     const cleanUrl = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
@@ -815,12 +815,12 @@ export default function DocumentWorkspacePage() {
                 {brushTool !== 'eraser' && (
                   <div className="flex items-center gap-1.5">
                     {[
-                      { hex: '#e11d48' }, { hex: '#5e6ad2' }, { hex: '#16a34a' }, { hex: '#d97706' }, { hex: '#ededef' },
+                      { hex: '#e11d48' }, { hex: '#5e6ad2' }, { hex: '#16a34a' }, { hex: '#d97706' }, { hex: '#0f0f11' },
                     ].map((c) => (
                       <button
                         key={c.hex}
                         onClick={() => setBrushColor(c.hex)}
-                        className={`h-4 w-4 rounded-full border transition-all cursor-pointer ${brushColor === c.hex ? 'ring-2 ring-primary ring-offset-1 ring-offset-card scale-110' : 'border-white/10'
+                        className={`h-4 w-4 rounded-full border transition-all cursor-pointer ${brushColor === c.hex ? 'ring-2 ring-primary ring-offset-1 ring-offset-card scale-110' : 'border-border'
                           }`}
                         style={{ backgroundColor: c.hex }}
                       />
@@ -877,8 +877,8 @@ export default function DocumentWorkspacePage() {
           {/* Canvas Sheet */}
           <div
             ref={canvasRef}
-            className="relative aspect-video w-full rounded-2xl overflow-hidden border border-border bg-[#0a0a0b] border-draft"
-            style={{ boxShadow: '0 4px 32px rgba(0,0,0,0.5)' }}
+            className="relative aspect-video w-full rounded-2xl overflow-hidden border border-border bg-[#FAFAFA] border-draft"
+            style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}
           >
             {/* Top Ruler */}
             <div className="absolute top-0 left-8 right-0 h-6 border-b border-border bg-card/80 flex justify-between px-4 pointer-events-none text-[7px] font-mono text-muted-foreground select-none z-10">
@@ -908,7 +908,7 @@ export default function DocumentWorkspacePage() {
               onPointerMove={handleContainerPointerMove}
               onPointerUp={() => setIsDraggingSlider(false)}
               onPointerLeave={() => { setIsDraggingSlider(false); setHoverCoords(null); }}
-              className="absolute top-6 left-8 right-0 bottom-0 overflow-hidden cursor-crosshair bg-[#070709]"
+              className="absolute top-6 left-8 right-0 bottom-0 overflow-hidden cursor-crosshair bg-white"
             >
               {/* Grid */}
               <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(13,148,136,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(13,148,136,0.05)_1px,transparent_1px)] bg-[size:15px_15px] opacity-70" />
@@ -979,16 +979,16 @@ export default function DocumentWorkspacePage() {
                   )}
 
                   {/* CAD Title Block */}
-                  <div className="absolute bottom-3 right-3 border border-white/[0.08] text-[7px] font-mono select-none pointer-events-none z-20 w-40"
-                    style={{ background: 'rgba(10,10,11,0.85)', backdropFilter: 'blur(8px)' }}>
-                    <div className="grid grid-cols-2 border-b border-white/[0.07]">
-                      <div className="p-1 border-r border-white/[0.07] font-bold text-foreground/60 truncate">AURA STUDIOS</div>
-                      <div className="p-1 text-foreground/40 truncate">{doc.name.split('.')[0]}</div>
+                  <div className="absolute bottom-3 right-3 border border-border text-[7px] font-mono select-none pointer-events-none z-20 w-40"
+                    style={{ background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(8px)' }}>
+                    <div className="grid grid-cols-2 border-b border-border/80">
+                      <div className="p-1 border-r border-border/80 font-bold text-foreground/75 truncate">AURA STUDIOS</div>
+                      <div className="p-1 text-foreground/60 truncate">{doc.name.split('.')[0]}</div>
                     </div>
                     <div className="grid grid-cols-3">
-                      <div className="p-1 border-r border-white/[0.07] text-foreground/40">1:100</div>
-                      <div className="p-1 border-r border-white/[0.07] font-bold text-primary">{activeVersion?.version_number}</div>
-                      <div className="p-1 text-[6px] uppercase font-bold text-foreground/30 truncate">JENKINS</div>
+                      <div className="p-1 border-r border-border/80 text-foreground/50">1:100</div>
+                      <div className="p-1 border-r border-border/80 font-bold text-primary">{activeVersion?.version_number}</div>
+                      <div className="p-1 text-[6px] uppercase font-bold text-foreground/50 truncate">JENKINS</div>
                     </div>
                   </div>
                 </div>
@@ -1038,7 +1038,7 @@ export default function DocumentWorkspacePage() {
                   animate={{ scale: 1, opacity: 0.85, rotate: -8 }}
                   transition={{ type: 'spring', damping: 12, stiffness: 90, delay: 0.2 }}
                   className="absolute top-10 right-10 border-4 border-double border-destructive text-destructive rounded-xl p-3 pointer-events-none z-30 font-mono text-center uppercase tracking-wider"
-                  style={{ background: 'rgba(10,10,11,0.75)', backdropFilter: 'blur(8px)' }}
+                  style={{ background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(8px)' }}
                 >
                   <div className="text-[6px] font-bold tracking-widest border-b border-destructive/50 pb-0.5 mb-1 px-2">AURA STUDIOS // DESIGN REVIEW</div>
                   <div className="text-sm font-black tracking-tight leading-none">APPROVED</div>

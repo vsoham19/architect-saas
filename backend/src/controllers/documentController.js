@@ -219,8 +219,8 @@ export const uploadDrawing = async (req, res, next) => {
       fs.writeFileSync(targetPath, imageBuffer);
     } catch (writeErr) {
       console.warn("[uploadDrawing] Failed to write drawing file to disk (expected on read-only environments like Vercel):", writeErr.message);
-      // Fallback to one of the seeded default drawings on Vercel
-      fileUrl = '/drawings/1780923953332_ChatGPT_Image_Jun_8__2026__06_35_09_PM.png';
+      // Fallback to full base64 data URL so it works seamlessly on serverless platforms
+      fileUrl = base64Data;
     }
 
     const fileSize = imageBuffer.length;

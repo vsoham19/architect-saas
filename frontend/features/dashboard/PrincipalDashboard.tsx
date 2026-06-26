@@ -369,9 +369,9 @@ export default function PrincipalDashboard() {
           <div
             className="relative w-full max-w-md p-6 rounded-2xl border border-border z-50 overflow-hidden"
             style={{
-              background: 'rgba(13,13,16,0.96)',
+              background: 'rgba(255, 255, 255, 0.98)',
               backdropFilter: 'blur(20px)',
-              boxShadow: '0 32px 80px rgba(0,0,0,0.8)',
+              boxShadow: '0 32px 80px rgba(0,0,0,0.15)',
             }}
           >
             <h3 className="text-sm font-extrabold text-foreground mb-4">Create New Project</h3>

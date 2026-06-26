@@ -66,3 +66,6 @@ ALTER TABLE tasks ADD COLUMN IF NOT EXISTS attached_version_id UUID REFERENCES d
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS zone VARCHAR(50) DEFAULT 'R1';
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS plot_area NUMERIC DEFAULT 10000;
 ALTER TABLE doc_versions ADD COLUMN IF NOT EXISTS built_up_area NUMERIC DEFAULT 0;
+
+-- 8. Alter file_url column to TEXT to support large base64 strings in serverless deployments
+ALTER TABLE doc_versions ALTER COLUMN file_url TYPE TEXT;
