@@ -143,8 +143,19 @@ export const runAiAnalysisPipeline = async (version) => {
                   (fileUrl || '').startsWith('data:application/octet-stream') ||
                   (fileUrl || '').startsWith('data:image/vnd.dwg');
 
-    if (isDwg) {
-      console.log(`[AI Pipeline] DWG file detected for version ${version.revision_number}. Bypassing Gemini API and simulating CAD elements.`);
+    let useMockAi = isDwg;
+    let resolvedPath = null;
+
+    if (!isDwg && !fileUrl.startsWith('data:') && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+      resolvedPath = resolveFilePath(fileUrl);
+      if (!resolvedPath) {
+        console.warn(`[AI Pipeline] Local drawing file not found on server disk: ${fileUrl}. Falling back to simulated elements.`);
+        useMockAi = true;
+      }
+    }
+
+    if (useMockAi) {
+      console.log(`[AI Pipeline] Bypassing Gemini API and simulating CAD elements for version ${version.revision_number}.`);
       drawingElements = [
         { "element_type": "wall", "label": "Main Auditorium Enclosure Wall", "confidence": 0.98 },
         { "element_type": "column", "label": "Load-bearing Column at Grid A1", "confidence": 0.95 },
@@ -158,7 +169,7 @@ export const runAiAnalysisPipeline = async (version) => {
         { "element_type": "staircase", "label": "Egress Stairwell A - Lobby Connection", "confidence": 0.93 }
       ];
       step1Raw = JSON.stringify(drawingElements);
-      modelName = "dwg-parser-mock";
+      modelName = isDwg ? "dwg-parser-mock" : "local-file-missing-mock";
       
       // Store elements in DB
       const insertRows = drawingElements.map(el => ({
@@ -173,7 +184,7 @@ export const runAiAnalysisPipeline = async (version) => {
         const { error } = await supabase.from('drawing_elements').insert(insertRows);
         if (error) throw error;
       }
-      console.log(`[AI Pipeline] Successfully stored simulated DWG elements in DB.`);
+      console.log(`[AI Pipeline] Successfully stored simulated elements in DB.`);
     } else {
       let imagePart;
       if (fileUrl.startsWith('data:')) {
@@ -204,10 +215,7 @@ export const runAiAnalysisPipeline = async (version) => {
           }
         };
       } else {
-        const resolvedPath = resolveFilePath(fileUrl);
-        if (!resolvedPath) {
-          throw new Error(`Drawing file not found on server disk: ${fileUrl}`);
-        }
+        // resolvedPath is guaranteed to be non-null and valid here
         const imageBuffer = fs.readFileSync(resolvedPath);
         const ext = path.extname(resolvedPath).toLowerCase();
         const mimeType = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.jpeg' || ext === '.jpg' ? 'image/jpeg' : 'image/png';
@@ -313,7 +321,15 @@ Example: [{"element_type":"column","label":"Load-bearing column at Grid B2","con
                     (fileUrl || '').startsWith('data:application/octet-stream') ||
                     (fileUrl || '').startsWith('data:image/vnd.dwg');
 
-      if (isDwg) {
+      let isLocalMissing = false;
+      if (!isDwg && !fileUrl.startsWith('data:') && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+        const pathCheck = resolveFilePath(fileUrl);
+        if (!pathCheck) isLocalMissing = true;
+      }
+
+      const useMockAi = isDwg || isLocalMissing;
+
+      if (useMockAi) {
         diffData = {
           elements_added: ["Main Auditorium Enclosure Wall", "Load-bearing Column at Grid A1", "Stage Exit Door Left"],
           elements_removed: [],
@@ -429,7 +445,15 @@ Return ONLY valid JSON. No markdown, no explanation.`;
                     (fileUrl || '').startsWith('data:application/octet-stream') ||
                     (fileUrl || '').startsWith('data:image/vnd.dwg');
 
-      if (isDwg) {
+      let isLocalMissing = false;
+      if (!isDwg && !fileUrl.startsWith('data:') && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+        const pathCheck = resolveFilePath(fileUrl);
+        if (!pathCheck) isLocalMissing = true;
+      }
+
+      const useMockAi = isDwg || isLocalMissing;
+
+      if (useMockAi) {
         taskSuggestions = [{
           task_id: activeTasks[0].id,
           reason: "Auditorium enclosure walls boundary changes affect structural steel spacing task.",
