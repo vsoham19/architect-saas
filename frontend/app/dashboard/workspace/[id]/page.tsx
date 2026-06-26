@@ -877,7 +877,7 @@ export default function DocumentWorkspacePage() {
           {/* Canvas Sheet */}
           <div
             ref={canvasRef}
-            className="relative aspect-video w-full rounded-2xl overflow-hidden border border-border bg-[#FAFAFA] border-draft"
+            className="relative aspect-video w-full rounded-2xl overflow-hidden border border-border bg-white border-draft"
             style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}
           >
             {/* Top Ruler */}
@@ -1120,7 +1120,7 @@ export default function DocumentWorkspacePage() {
           {/* Upload confirm modal */}
           {uploadTypeConfirm && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setUploadTypeConfirm(null)} />
+              <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setUploadTypeConfirm(null)} />
               <div className="relative w-full max-w-sm rounded-2xl border border-border z-50 overflow-hidden bg-card/95 backdrop-blur-md shadow-2xl">
                 <div className="p-6 text-center space-y-4">
                   <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto text-primary">
@@ -1492,7 +1492,7 @@ export default function DocumentWorkspacePage() {
       {/* ── Task Tag Modal ── */}
       {showTagModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" onClick={() => setShowTagModal(false)} />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setShowTagModal(false)} />
           <div className="relative w-full max-w-2xl rounded-2xl border border-border overflow-hidden z-10 bg-card/95 backdrop-blur-md shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
@@ -1582,7 +1582,7 @@ export default function DocumentWorkspacePage() {
       {/* ── Success Modal ── */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" />
           <div className="relative w-full max-w-sm rounded-2xl border border-border z-10 overflow-hidden bg-card/95 backdrop-blur-md shadow-2xl">
             <div className="p-6 text-center space-y-4">
               <div className="h-12 w-12 rounded-2xl bg-emerald-50 border border-emerald-200/50 flex items-center justify-center mx-auto text-emerald-600">
@@ -1612,7 +1612,7 @@ export default function DocumentWorkspacePage() {
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setIsAiPanelOpen(false)}
-              className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-white/60 backdrop-blur-md z-40"
             />
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}

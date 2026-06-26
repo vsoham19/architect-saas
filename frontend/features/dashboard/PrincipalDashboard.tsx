@@ -365,7 +365,7 @@ export default function PrincipalDashboard() {
       {/* Create Project Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-xs" onClick={() => setShowCreateModal(false)} />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setShowCreateModal(false)} />
           <div
             className="relative w-full max-w-md p-6 rounded-2xl border border-border z-50 overflow-hidden"
             style={{

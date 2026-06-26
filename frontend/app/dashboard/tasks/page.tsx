@@ -314,6 +314,12 @@ export default function TaskBoardPage() {
                                     });
                                     const data = await res.json();
                                     if (res.ok && data.attached_version_id) {
+                                      // Update local store with the new version if returned
+                                      if (data.version) {
+                                        useDBStore.setState((state) => ({
+                                          documentVersions: [...state.documentVersions, data.version]
+                                        }));
+                                      }
                                       // Update task with attached version and set status to review
                                       useDBStore.getState().updateTaskFields(task.id, {
                                         attached_version_id: data.attached_version_id,
@@ -424,7 +430,7 @@ export default function TaskBoardPage() {
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedTask(null)}
-              className="fixed inset-0 bg-black/60 z-40"
+              className="fixed inset-0 bg-white/60 backdrop-blur-md z-40"
             />
             {/* Drawer */}
             <motion.div
@@ -650,7 +656,7 @@ export default function TaskBoardPage() {
       {/* Task Creation Drawer Modal */}
       {showCreateDrawer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCreateDrawer(false)} />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setShowCreateDrawer(false)} />
           <div className="relative w-full max-w-md p-6 rounded-2xl border border-border bg-card shadow-2xl z-10">
             <h3 className="text-md font-bold text-foreground mb-4">Create New Task</h3>
             <form onSubmit={handleCreateTask} className="space-y-4 text-xs font-semibold text-foreground">

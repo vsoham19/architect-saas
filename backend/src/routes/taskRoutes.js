@@ -6,7 +6,7 @@ import { getTasks, createTask, updateTaskStatus, deleteTask, uploadTaskImage, ba
 
 const router = express.Router();
 
-const upload = multer({ dest: path.join(os.tmpdir(), 'uploads') });
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/', getTasks);
 router.post('/', createTask);

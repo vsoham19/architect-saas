@@ -65,6 +65,7 @@ export default function ProjectDetailsPage() {
   const [docDesc, setDocDesc] = useState('');
   const [changelog, setChangelog] = useState('');
   const [builtUpArea, setBuiltUpArea] = useState('0');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Find Project
   const project = projects.find(p => p.id === projectId);
@@ -121,63 +122,82 @@ export default function ProjectDetailsPage() {
     e.preventDefault();
     if (!docName) return;
 
-    const taskIdParam = searchParams.get('taskId');
-
-    const result = await uploadDocumentVersion({
-      projectId,
-      documentName: docName,
-      description: docDesc,
-      changelog: changelog || 'Initial draft upload',
-      fileUrl: `/drawings/${docName.toLowerCase().replace(/\s+/g, '_')}_v1.jpg`,
-      fileSize: Math.floor(Math.random() * 15000000) + 5000000,
-      uploadedBy: currentUser?.id || '00000000-0000-0000-0000-000000000001',
-      builtUpArea: Number(builtUpArea) || 0
-    });
-
-    if (result && result.ver && taskIdParam) {
-      // 1. Link new drawing version to the task
-      await useDBStore.getState().updateTaskFields(taskIdParam, {
-        attached_version_id: result.ver.id,
-        status: 'review'
-      });
-
-      // 2. Notify the senior supervisor and principal
-      const task = tasks.find(t => t.id === taskIdParam);
-      const projMembers = teamMembers.filter(tm => tm.team_id === `team-${projectId}`);
-      projMembers.forEach(m => {
-        if (m.user_id !== currentUser?.id && (m.role === 'senior' || m.role === 'principal')) {
-          useDBStore.getState().addNotification({
-            user_id: m.user_id,
-            sender_id: currentUser?.id || null,
-            type: 'approval_required',
-            title: 'Task Drawing uploaded in Vault',
-            message: `A new version of drawing for task "${task?.title || 'Task'}" has been uploaded to the Vault by ${currentUser?.name || 'Junior'}. Comment: "${changelog || 'No comments'}"`,
-            metadata: { project_id: projectId, task_id: taskIdParam, document_id: result.doc.id, version_id: result.ver.id }
-          });
-        }
-      });
-
-      // Trigger activity log in DB store
-      useDBStore.getState().addActivityLog({
-        project_id: projectId,
-        user_id: currentUser?.id || '',
-        action: 'task_upload',
-        details: `Uploaded deliverable drawing in vault for task "${task?.title || 'Task'}": "${changelog || 'No comment'}"`
-      });
-
-      alert("Drawing uploaded to Vault and task submitted for review successfully!");
-    } else {
-      alert("Drawing uploaded to Vault successfully!");
+    if (!selectedFile) {
+      alert("Please select a blueprint file first.");
+      return;
     }
 
-    setDocName('');
-    setDocDesc('');
-    setChangelog('');
-    setBuiltUpArea('0');
-    setShowDocModal(false);
+    const taskIdParam = searchParams.get('taskId');
 
-    // Clean up query parameters from the URL
-    router.replace(`/dashboard/projects/${projectId}?tab=documents`);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      try {
+        const result = await uploadDocumentVersion({
+          projectId,
+          documentName: docName,
+          description: docDesc,
+          changelog: changelog || 'Initial draft upload',
+          fileUrl: base64,
+          fileSize: selectedFile.size,
+          uploadedBy: currentUser?.id || '00000000-0000-0000-0000-000000000001',
+          builtUpArea: Number(builtUpArea) || 0
+        });
+
+        if (result && result.ver && taskIdParam) {
+          // 1. Link new drawing version to the task
+          await useDBStore.getState().updateTaskFields(taskIdParam, {
+            attached_version_id: result.ver.id,
+            status: 'review'
+          });
+
+          // 2. Notify the senior supervisor and principal
+          const task = tasks.find(t => t.id === taskIdParam);
+          const projMembers = teamMembers.filter(tm => tm.team_id === `team-${projectId}`);
+          projMembers.forEach(m => {
+            if (m.user_id !== currentUser?.id && (m.role === 'senior' || m.role === 'principal')) {
+              useDBStore.getState().addNotification({
+                user_id: m.user_id,
+                sender_id: currentUser?.id || null,
+                type: 'approval_required',
+                title: 'Task Drawing uploaded in Vault',
+                message: `A new version of drawing for task "${task?.title || 'Task'}" has been uploaded to the Vault by ${currentUser?.name || 'Junior'}. Comment: "${changelog || 'No comments'}"`,
+                metadata: { project_id: projectId, task_id: taskIdParam, document_id: result.doc.id, version_id: result.ver.id }
+              });
+            }
+          });
+
+          // Trigger activity log in DB store
+          useDBStore.getState().addActivityLog({
+            project_id: projectId,
+            user_id: currentUser?.id || '',
+            action: 'task_upload',
+            details: `Uploaded deliverable drawing in vault for task "${task?.title || 'Task'}": "${changelog || 'No comment'}"`
+          });
+
+          alert("Drawing uploaded to Vault and task submitted for review successfully!");
+        } else {
+          alert("Drawing uploaded to Vault successfully!");
+        }
+      } catch (err) {
+        console.error("Upload failed", err);
+        alert("Failed to upload drawing.");
+      }
+
+      setDocName('');
+      setDocDesc('');
+      setChangelog('');
+      setBuiltUpArea('0');
+      setSelectedFile(null);
+      setShowDocModal(false);
+
+      // Clean up query parameters from the URL
+      router.replace(`/dashboard/projects/${projectId}?tab=documents`);
+    };
+    reader.onerror = () => {
+      alert("Failed to read selection file.");
+    };
+    reader.readAsDataURL(selectedFile);
   };
 
   const getStatusColor = (status: string) => {
@@ -628,7 +648,7 @@ export default function ProjectDetailsPage() {
       {/* Task Creation Modal */}
       {showTaskModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowTaskModal(false)} />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setShowTaskModal(false)} />
           <div className="relative w-full max-w-md p-6 rounded-2xl border border-border bg-card shadow-2xl z-10">
             <h3 className="text-md font-bold text-foreground mb-4">Add Project Task</h3>
             <form onSubmit={handleTaskSubmit} className="space-y-4 text-xs font-semibold text-foreground">
@@ -713,7 +733,7 @@ export default function ProjectDetailsPage() {
       {/* Drawing Upload Modal */}
       {showDocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDocModal(false)} />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setShowDocModal(false)} />
           <div className="relative w-full max-w-md p-6 rounded-2xl border border-border bg-card shadow-2xl z-10">
             <h3 className="text-md font-bold text-foreground mb-4">Upload Design Drawing</h3>
             <form onSubmit={handleDocSubmit} className="space-y-4 text-xs font-semibold text-foreground">
@@ -727,6 +747,7 @@ export default function ProjectDetailsPage() {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
+                        setSelectedFile(file);
                         setDocName(file.name);
                         if (!docDesc) {
                           setDocDesc(`Deliverable drawing for ${file.name}`);
@@ -812,7 +833,7 @@ export default function ProjectDetailsPage() {
       {/* Adjust Crew Assignments Modal */}
       {showTeamModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowTeamModal(false)} />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setShowTeamModal(false)} />
           <div className="relative w-full max-w-md p-6 rounded-2xl border border-border bg-card shadow-2xl z-10">
             <h3 className="text-md font-bold text-foreground mb-2">Adjust Crew Assignments</h3>
             <p className="text-xs text-muted-foreground mb-4">

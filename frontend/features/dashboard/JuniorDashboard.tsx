@@ -67,29 +67,46 @@ export default function JuniorDashboard() {
 
     setIsUploading(true);
 
-    setTimeout(() => {
+    const performUpload = (fileUrl: string, fileSize: number) => {
       uploadDocumentVersion({
         projectId,
         documentName: docName,
         description: docDesc,
         changelog: changelog || 'Initial deliverable draft',
-        fileUrl: selectedFile
-          ? `/drawings/${selectedFile.name}`
-          : `/drawings/${docName.toLowerCase().replace(/\s+/g, '_')}_rev.jpg`,
-        fileSize: selectedFile?.size ?? Math.floor(Math.random() * 20000000) + 5000000,
+        fileUrl,
+        fileSize,
         uploadedBy: currentUser?.id || '00000000-0000-0000-0000-000000000004'
+      }).then(() => {
+        setIsUploading(false);
+        setUploadSuccess(true);
+        setDocName('');
+        setDocDesc('');
+        setChangelog('');
+        setProjectId('');
+        setSelectedFile(null);
+        setTimeout(() => setUploadSuccess(false), 4000);
+      }).catch(err => {
+        console.error("Upload failed", err);
+        alert("Failed to save deliverable drawing.");
+        setIsUploading(false);
       });
+    };
 
-      setIsUploading(false);
-      setUploadSuccess(true);
-      setDocName('');
-      setDocDesc('');
-      setChangelog('');
-      setProjectId('');
-      setSelectedFile(null);
-
-      setTimeout(() => setUploadSuccess(false), 4000);
-    }, 1200);
+    if (selectedFile) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        performUpload(base64, selectedFile.size);
+      };
+      reader.onerror = () => {
+        alert("Failed to read file.");
+        setIsUploading(false);
+      };
+      reader.readAsDataURL(selectedFile);
+    } else {
+      const mockBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      performUpload(mockBase64, 1000);
+    }
   };
 
   // Find ongoing projects this junior is team member of

@@ -228,7 +228,7 @@ export default function ProjectsPage() {
       {/* Create Project Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-md" onClick={() => setShowCreateModal(false)} />
           <div className="relative w-full max-w-md p-6 rounded-2xl border border-border bg-card shadow-2xl z-10">
             <h3 className="text-md font-bold text-foreground mb-4">Create New Project</h3>
             <form onSubmit={handleCreateProject} className="space-y-4 text-xs font-semibold text-foreground">

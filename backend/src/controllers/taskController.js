@@ -4,26 +4,36 @@ import { v4 as uuidv4 } from 'uuid';
 export const uploadTaskImage = async (req, res, next) => {
   try {
     const { id } = req.params; // task id
-    // multer middleware should have processed file
     const file = req.file;
     if (!file) {
       return res.status(400).json({ status: 'error', message: 'No file uploaded' });
     }
     // Generate a new version id (attached_version_id)
     const attachedVersionId = uuidv4();
-    // For simplicity, store file path in a new doc_versions record (you may adapt to your storage solution)
-    const { error: verError } = await supabase
+
+    // Convert file buffer to base64 Data URL
+    const base64Data = file.buffer.toString('base64');
+    const mimeType = file.mimetype || 'image/png';
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+
+    // Insert doc_versions record with base64 Data URL as file_url
+    const { data: newVersion, error: verError } = await supabase
       .from('doc_versions')
       .insert({
         id: attachedVersionId,
         document_id: null, // no parent document, optional
         revision_number: 1,
-        file_url: file.path,
+        file_url: dataUrl,
         file_size: file.size,
         change_summary: 'Task image upload',
         created_by: req.headers['x-user-id'] || 'system',
-        created_at: new Date().toISOString()
-      });
+        created_at: new Date().toISOString(),
+        status: 'pending',
+        drawing_data: { strokes: [] }
+      })
+      .select()
+      .single();
+
     if (verError) throw new Error(verError.message || JSON.stringify(verError));
 
     // Update task with attached_version_id and status 'review'
@@ -33,7 +43,7 @@ export const uploadTaskImage = async (req, res, next) => {
       .eq('id', id);
     if (taskError) throw new Error(taskError.message || JSON.stringify(taskError));
 
-    return res.status(200).json({ status: 'success', attached_version_id: attachedVersionId });
+    return res.status(200).json({ status: 'success', attached_version_id: attachedVersionId, version: newVersion });
   } catch (err) {
     next(err);
   }
