@@ -312,28 +312,22 @@ export default function DocumentWorkspacePage() {
     }
   }, [strokes, drawingMode]);
 
-  const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeVersion) return;
-    if (file.size > 30 * 1024 * 1024) { alert("File exceeds 30MB."); return; }
-    const reader = new FileReader();
-    reader.onload = () => setUploadTypeConfirm({ file, base64: reader.result as string });
-    reader.readAsDataURL(file);
-  };
-
-  const handleImageUploadConfirmed = async (isCurrentVersion: boolean) => {
-    if (!uploadTypeConfirm || !activeVersion || !doc) return;
-    const { file, base64 } = uploadTypeConfirm;
-    setUploadTypeConfirm(null); setImageUploading(true);
+  const uploadDrawingFile = async (file: File, base64: string, isCurrent: boolean) => {
+    if (!doc) return;
+    setImageUploading(true);
     try {
       const payload: any = {
-        document_id: doc.id, filename: file.name, base64Data: base64,
-        changelog: isCurrentVersion ? `Updated image background of ${activeVersion.version_number}` : `Created new version: ${file.name}`,
+        document_id: doc.id,
+        filename: file.name,
+        base64Data: base64,
+        changelog: (isCurrent && activeVersion) ? `Updated image background of ${activeVersion.version_number}` : `Created new version: ${file.name}`,
         created_by: currentUser?.id
       };
-      if (isCurrentVersion) payload.version_id = activeVersion.id;
+      if (isCurrent && activeVersion) payload.version_id = activeVersion.id;
       const res = await fetch(`${getApiUrl()}/api/documents/upload-drawing`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
       const resJson = await res.json();
       if (resJson.success || resJson.status === 'success') {
@@ -342,7 +336,7 @@ export default function DocumentWorkspacePage() {
         manualVersionSet.current = true;
         setImageKey(k => k + 1); // bust image cache so new upload is shown immediately
         setAiStatuses((prev) => ({ ...prev, [mappedVer.id]: 'processing' }));
-        if (isCurrentVersion) {
+        if (isCurrent && activeVersion) {
           // Update the store version AND set as active
           useDBStore.setState((state) => ({ documentVersions: state.documentVersions.map(v => v.id === mappedVer.id ? mappedVer : v) }));
           setActiveVersion(mappedVer);
@@ -356,10 +350,41 @@ export default function DocumentWorkspacePage() {
         }
         // Reset guard after a tick (after React batches the state updates)
         setTimeout(() => { manualVersionSet.current = false; }, 100);
-        fetchAiData(mappedVer.id); fetchDiffLog();
-      } else { alert(`Upload failed: ${resJson.message || 'unknown error'}`); }
-    } catch (err) { console.error("Upload failed:", err); alert("Upload error."); }
-    finally { setImageUploading(false); }
+        fetchAiData(mappedVer.id);
+        fetchDiffLog();
+      } else {
+        alert(`Upload failed: ${resJson.message || 'unknown error'}`);
+      }
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Upload error.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 30 * 1024 * 1024) { alert("File exceeds 30MB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      if (!activeVersion) {
+        // Upload immediately if there is no active version
+        uploadDrawingFile(file, base64, false);
+      } else {
+        setUploadTypeConfirm({ file, base64 });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageUploadConfirmed = async (isCurrentVersion: boolean) => {
+    if (!uploadTypeConfirm) return;
+    const { file, base64 } = uploadTypeConfirm;
+    setUploadTypeConfirm(null);
+    await uploadDrawingFile(file, base64, isCurrentVersion);
   };
 
   useEffect(() => {
