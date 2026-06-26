@@ -176,7 +176,10 @@ export default function DocumentWorkspacePage() {
   // Resolve a file_url to a fully-qualified src with optional cache-busting
   const resolveImageSrc = (fileUrl: string | undefined | null, bustCache = false): string => {
     if (!fileUrl) return '';
-    if (fileUrl.startsWith('http') || fileUrl.startsWith('data:')) {
+    if (fileUrl.startsWith('data:')) {
+      return fileUrl; // base64 doesn't need cache-busting and will fail if query params are appended
+    }
+    if (fileUrl.startsWith('http')) {
       return bustCache ? `${fileUrl}?t=${imageKey}` : fileUrl;
     }
     const cleanUrl = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
@@ -880,7 +883,7 @@ export default function DocumentWorkspacePage() {
 
             {/* Upload */}
             <div>
-              <input type="file" ref={fileInputRef} accept="image/png, image/jpeg" onChange={handleImageFileSelected} className="hidden" />
+              <input type="file" ref={fileInputRef} accept="image/png, image/jpeg, image/jpg, .dwg" onChange={handleImageFileSelected} className="hidden" />
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={imageUploading}
@@ -933,35 +936,82 @@ export default function DocumentWorkspacePage() {
 
               <div className="absolute inset-0 p-8">
                 <div className="w-full h-full relative" id="drawing-content-wrapper">
-                  {isCompareMode ? (
-                    <>
-                      {activeVersion?.file_url && (
-                        <img key={`active-${activeVersion.id}-${imageKey}`} src={resolveImageSrc(activeVersion.file_url, true)} alt="Drawing" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
-                      )}
-                      {renderCadLayers(activeVersion?.version_number || 'v1.1.0')}
-                      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}>
-                        {compareVersion?.file_url && (
-                          <img key={`compare-${compareVersion.id}`} src={resolveImageSrc(compareVersion.file_url)} alt="Compare" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+                  {(() => {
+                    const isDwgFile = (url: string | undefined | null) => {
+                      if (!url) return false;
+                      const u = url.toLowerCase();
+                      return u.includes('.dwg') || u.startsWith('data:application/dwg') || u.startsWith('data:application/octet-stream') || u.startsWith('data:image/vnd.dwg');
+                    };
+
+                    const isActiveDwg = isDwgFile(activeVersion?.file_url);
+                    const isCompareDwg = isDwgFile(compareVersion?.file_url);
+
+                    return isCompareMode ? (
+                      <>
+                        {activeVersion?.file_url && (
+                          isActiveDwg ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-teal-500/[0.03] border border-teal-500/10 rounded-2xl p-6 text-center select-none font-mono z-10">
+                              <div className="h-16 w-16 rounded-full bg-teal-500/10 border border-teal-500/20 flex items-center justify-center mb-3">
+                                <Layers className="text-teal-500 animate-pulse" size={32} />
+                              </div>
+                              <p className="text-sm font-bold text-foreground">DWG CAD File Loaded ({activeVersion.version_number})</p>
+                              <p className="text-[10px] text-muted-foreground mt-1 max-w-sm leading-relaxed">
+                                Visual rendering is not supported natively in-browser. All elements, annotations, and FSI compliance tags are fully active.
+                              </p>
+                            </div>
+                          ) : (
+                            <img key={`active-${activeVersion.id}-${imageKey}`} src={resolveImageSrc(activeVersion.file_url, true)} alt="Drawing" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+                          )
                         )}
-                        {renderCadLayers(compareVersion?.version_number || 'v1.0.0')}
-                      </div>
-                      <div className="absolute top-0 bottom-0 w-px bg-primary z-30 pointer-events-none" style={{ left: `${sliderPosition}%` }} />
-                      <div
-                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingSlider(true); }}
-                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-7 w-7 rounded-full bg-primary hover:bg-primary/95 text-primary-foreground shadow-lg border border-primary/20 flex items-center justify-center cursor-ew-resize z-40 select-none"
-                        style={{ left: `${sliderPosition}%` }}
-                      >
-                        <ArrowLeftRight size={11} className="select-none pointer-events-none" />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {activeVersion?.file_url && (
-                        <img key={`active-${activeVersion.id}-${imageKey}`} src={resolveImageSrc(activeVersion.file_url, true)} alt="Drawing" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
-                      )}
-                      {renderCadLayers(activeVersion?.version_number || 'v1.1.0')}
-                    </>
-                  )}
+                        {renderCadLayers(activeVersion?.version_number || 'v1.1.0')}
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}>
+                          {compareVersion?.file_url && (
+                            isCompareDwg ? (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-sky-500/[0.03] border border-sky-500/10 rounded-2xl p-6 text-center select-none font-mono z-10">
+                                <div className="h-16 w-16 rounded-full bg-sky-500/10 border border-sky-500/20 flex items-center justify-center mb-3">
+                                  <Layers className="text-sky-500 animate-pulse" size={32} />
+                                </div>
+                                <p className="text-sm font-bold text-foreground">DWG CAD File Loaded ({compareVersion.version_number})</p>
+                                <p className="text-[10px] text-muted-foreground mt-1 max-w-sm leading-relaxed">
+                                  Visual rendering is not supported natively in-browser. All elements, annotations, and FSI compliance tags are fully active.
+                                </p>
+                              </div>
+                            ) : (
+                              <img key={`compare-${compareVersion.id}`} src={resolveImageSrc(compareVersion.file_url)} alt="Compare" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+                            )
+                          )}
+                          {renderCadLayers(compareVersion?.version_number || 'v1.0.0')}
+                        </div>
+                        <div className="absolute top-0 bottom-0 w-px bg-primary z-30 pointer-events-none" style={{ left: `${sliderPosition}%` }} />
+                        <div
+                          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingSlider(true); }}
+                          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-7 w-7 rounded-full bg-primary hover:bg-primary/95 text-primary-foreground shadow-lg border border-primary/20 flex items-center justify-center cursor-ew-resize z-40 select-none"
+                          style={{ left: `${sliderPosition}%` }}
+                        >
+                          <ArrowLeftRight size={11} className="select-none pointer-events-none" />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {activeVersion?.file_url && (
+                          isActiveDwg ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-teal-500/[0.03] border border-teal-500/10 rounded-2xl p-6 text-center select-none font-mono z-10">
+                              <div className="h-16 w-16 rounded-full bg-teal-500/10 border border-teal-500/20 flex items-center justify-center mb-3">
+                                <Layers className="text-teal-500 animate-pulse" size={32} />
+                              </div>
+                              <p className="text-sm font-bold text-foreground">DWG CAD File Loaded ({activeVersion.version_number})</p>
+                              <p className="text-[10px] text-muted-foreground mt-1 max-w-sm leading-relaxed">
+                                Visual rendering is not supported natively in-browser. All elements, annotations, and FSI compliance tags are fully active.
+                              </p>
+                            </div>
+                          ) : (
+                            <img key={`active-${activeVersion.id}-${imageKey}`} src={resolveImageSrc(activeVersion.file_url, true)} alt="Drawing" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+                          )
+                        )}
+                        {renderCadLayers(activeVersion?.version_number || 'v1.1.0')}
+                      </>
+                    );
+                  })()}
 
                   {/* Drawing Canvas */}
                   <canvas

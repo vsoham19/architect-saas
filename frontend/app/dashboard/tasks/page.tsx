@@ -299,7 +299,7 @@ export default function TaskBoardPage() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="file"
-                                accept="image/*"
+                                accept="image/*,.dwg"
                                 id={`upload-${task.id}`}
                                 className="hidden"
                                 onChange={async (e) => {

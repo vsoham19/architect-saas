@@ -742,7 +742,7 @@ export default function ProjectDetailsPage() {
                 <div className="border border-dashed border-border rounded-xl p-4 text-center hover:bg-secondary/35 transition-colors cursor-pointer relative bg-secondary/10">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.dwg"
                     required={!docName}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
