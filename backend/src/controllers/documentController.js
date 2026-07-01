@@ -246,8 +246,9 @@ export const uploadDrawing = async (req, res, next) => {
       // Insert new version
       const { data: versions, error: verCountErr } = await supabase
         .from('doc_versions')
-        .select('revision_number')
-        .eq('document_id', document_id);
+        .select('id, revision_number')
+        .eq('document_id', document_id)
+        .order('revision_number', { ascending: false });
       if (verCountErr) throw verCountErr;
 
       const revisionNumber = (versions?.length || 0) + 1;
@@ -269,6 +270,45 @@ export const uploadDrawing = async (req, res, next) => {
       
       if (insertErr) throw insertErr;
       targetVersion = newVersion;
+
+      // Copy unresolved pins from the previous version if it exists
+      if (versions && versions.length > 0) {
+        const prevVersion = versions[0];
+        try {
+          const { data: unresolvedPins, error: pinsErr } = await supabase
+            .from('canvas_pins')
+            .select('*')
+            .eq('version_id', prevVersion.id)
+            .eq('resolved', false);
+          
+          if (pinsErr) {
+            console.error(`[uploadDrawing] Error fetching unresolved pins from version ${prevVersion.id}:`, pinsErr);
+          } else if (unresolvedPins && unresolvedPins.length > 0) {
+            const pinsToCopy = unresolvedPins.map(pin => ({
+              document_id,
+              version_id: newVersion.id,
+              created_by: pin.created_by,
+              x_percent: pin.x_percent,
+              y_percent: pin.y_percent,
+              note: pin.note,
+              pin_type: pin.pin_type || 'review_comment',
+              resolved: false
+            }));
+
+            const { error: insertPinsErr } = await supabase
+              .from('canvas_pins')
+              .insert(pinsToCopy);
+
+            if (insertPinsErr) {
+              console.error(`[uploadDrawing] Error inserting copied pins for new version ${newVersion.id}:`, insertPinsErr);
+            } else {
+              console.log(`[uploadDrawing] Successfully copied ${pinsToCopy.length} unresolved pins from version ${prevVersion.id} to new version ${newVersion.id}`);
+            }
+          }
+        } catch (copyErr) {
+          console.error('[uploadDrawing] Exception occurred during pin copy:', copyErr);
+        }
+      }
 
       // Update document current version
       const { error: updateDocErr } = await supabase

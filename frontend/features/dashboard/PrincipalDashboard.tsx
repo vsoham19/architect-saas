@@ -130,7 +130,7 @@ export default function PrincipalDashboard() {
               placeholder="Search drawings or review logs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-secondary border border-border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground/50"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground/50 shadow-xs text-foreground"
             />
           </div>
 

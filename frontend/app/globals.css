@@ -4,12 +4,14 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-headline: var(--font-hanken-grotesk), -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'Fira Code', 'Geist Mono', monospace;
 
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-primary: var(--primary);
+  --color-primary-container: var(--primary-container);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -24,6 +26,26 @@
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
 
+  /* Redesign container / surface container vars */
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-outline-variant: var(--outline-variant);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-on-surface: var(--on-surface);
+  --color-secondary-container: var(--secondary-container);
+  --color-on-secondary-container: var(--on-secondary-container);
+  --color-secondary-fixed: var(--secondary-fixed);
+  --color-on-secondary-fixed-variant: var(--on-secondary-fixed-variant);
+  --color-tertiary-fixed: var(--tertiary-fixed);
+  --color-on-tertiary-fixed: var(--on-tertiary-fixed);
+  --color-tertiary-container: var(--tertiary-container);
+  --color-on-tertiary-container: var(--on-tertiary-container);
+  --color-tertiary: var(--tertiary);
+  --color-on-tertiary: var(--on-tertiary);
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -31,52 +53,74 @@
 
 :root {
   /* Backgrounds */
-  --background: #FAFAFA;
-  --foreground: #0F0F11;
+  --background: #f4f8f6;
+  --foreground: #181c1e;
 
-  --card: #FFFFFF;
-  --card-foreground: #0F0F11;
+  --card: #ffffff;
+  --card-foreground: #181c1e;
 
-  --popover: #FFFFFF;
-  --popover-foreground: #0F0F11;
+  --popover: #ffffff;
+  --popover-foreground: #181c1e;
 
-  /* Primary: Teal */
-  --primary: #0D9488;
-  --primary-foreground: #FFFFFF;
+  /* Primary: Deep Forest Teal */
+  --primary: #00685d;
+  --primary-container: #008376;
+  --primary-foreground: #ffffff;
 
   /* Secondary surfaces */
-  --secondary: #F4F4F5;
-  --secondary-foreground: #0F0F11;
+  --secondary: #eef3f1;
+  --secondary-foreground: #181c1e;
 
   /* Muted */
-  --muted: #F4F4F5;
-  --muted-foreground: #71717A;
+  --muted: #ecf2ef;
+  --muted-foreground: #556864;
 
   /* Accent — soft teal tint */
-  --accent: #F0FDFA;
-  --accent-foreground: #0F766E;
+  --accent: #cfe8e3;
+  --accent-foreground: #081f1d;
 
   /* Destructive */
-  --destructive: #EF4444;
-  --destructive-foreground: #FFFFFF;
+  --destructive: #ba1a1a;
+  --destructive-foreground: #ffffff;
 
   /* Borders & Inputs */
-  --border: #E4E4E7;
-  --input: #E4E4E7;
-  --ring: #0D9488;
+  --border: #a8bfba;
+  --input: #a8bfba;
+  --ring: #00685d;
 
-  --radius: 0.625rem;
+  --radius: 0.75rem;
+
+  /* Redesign specific colors */
+  --surface-container: #e5ece9;
+  --surface-container-low: #edf3f0;
+  --surface-container-lowest: #ffffff;
+  --surface-container-high: #dae4e0;
+  --surface-container-highest: #cfded9;
+  --outline-variant: #9fb7b2;
+  --on-surface-variant: #2f3d3a;
+  --on-surface: #181c1e;
+  --secondary-container: #d5ece9;
+  --on-secondary-container: #053732;
+  --secondary-fixed: #dbeeed;
+  --on-secondary-fixed-variant: #1a4641;
+  --tertiary-fixed: #cfe8e3;
+  --on-tertiary-fixed: #081f1d;
+  --tertiary-container: #627975;
+  --on-tertiary-container: #f4fffc;
+  --tertiary: #4a605d;
+  --on-tertiary: #ffffff;
 }
 
 /* Base HTML & Body */
 html {
-  font-size: 110%;
+  font-size: 100%;
 }
 body {
   background-color: var(--background);
-  color: var(--foreground);
+  color: var(--on-surface);
+  font-family: var(--font-sans), sans-serif;
   font-weight: 400;
-  font-size: 15.4px;
+  font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -85,15 +129,19 @@ body {
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background: #D4D4D8;
-  border-radius: 9999px;
+  background: #bcc9c6;
+  border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+::-webkit-scrollbar-thumb:hover {
+  background: #6d7a77;
+}
 
 /* CAD title block */
 .cad-title-block {
@@ -142,4 +190,12 @@ body {
 .animate-dash-flow {
   stroke-dasharray: 4, 4;
   animation: dash-flow 0.8s linear infinite;
+}
+
+/* Blueprint Grid Background Pattern */
+.blueprint-grid {
+  background-image:
+    linear-gradient(to right, rgba(0, 107, 95, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 107, 95, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
 }

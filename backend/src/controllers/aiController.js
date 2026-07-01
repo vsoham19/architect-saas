@@ -708,3 +708,185 @@ export const triggerAnalysis = async (req, res, next) => {
     next(err);
   }
 };
+
+export const getAssistantResponse = async (req, res, next) => {
+  try {
+    const { message, role, userName, history = [] } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Groq API Key is not configured' });
+    }
+
+    // Role-specific guidelines and navigation targets
+    let roleSpecificGuide = '';
+    if (role === 'principal') {
+      roleSpecificGuide = `
+The user is a Principal (Sarah Jenkins). As a Principal, their primary tasks are:
+1. High-level project and resource management.
+2. Giving final sign-off on drawings via the Principal Sign-Off Pipeline.
+3. Gating approvals behind task dependencies or explicitly bypassing them.
+4. Creating new projects and managing team membership.
+
+Guide them to these sub-pages/features:
+- [Projects Ledger](/dashboard/projects) to review active architectural mandates or create a new project.
+- [Crews & Workloads](/dashboard/teams) to manage team assignments and check staff capacity.
+- [Drawing Vault] inside a specific project details page (e.g. click on a project in the Projects Ledger) to sign off on submitted versions, tag affected tasks, or bypass dependencies.
+- [Audit Trail](/dashboard/audit) to view logs.
+- [Settings](/dashboard/settings) to switch mock roles.
+`;
+    } else if (role === 'senior') {
+      roleSpecificGuide = `
+The user is a Senior Lead (David Miller or Elena Rostova). As a Senior Lead, their primary tasks are:
+1. Dropping coordinate pin annotations on drawings.
+2. Proposing changes bundled as Review Packages.
+3. Reviewing junior architect drawing uploads.
+4. Task monitoring via the Kanban board (they are notified when a junior sets a task to "Review").
+
+Guide them to these sub-pages/features:
+- [Task Board](/dashboard/tasks) to check drawings submitted for review.
+- [CAD Workspace] at /dashboard/workspace/[id] (enter from project drawings vault) to drop coordinate pins and review drawings.
+- [Crews & Workloads](/dashboard/teams) to see crew capacities.
+`;
+    } else if (role === 'junior') {
+      roleSpecificGuide = `
+The user is a Junior Architect (Alex Rivers or Liam Chen). As a Junior Architect, their primary tasks are:
+1. Drafting deliverables and uploading CAD/drafting files.
+2. Managing tasks via the Kanban Board (pending, in_progress, review, completed).
+3. Resetting documents to pending_review when uploading a draft, which auto-starts a review cycle.
+4. Flagging blocked status to trigger alerts for senior leads.
+
+Guide them to these sub-pages/features:
+- [Task Board](/dashboard/tasks) to drag-and-drop tasks or update their status.
+- [Design Vault] (Drawing list inside a specific project details page /dashboard/projects/[id]) to drag-and-drop file uploads.
+- [CAD Workspace] at /dashboard/workspace/[id] to view senior lead markup/coordinate pins and comments.
+`;
+    } else {
+      roleSpecificGuide = `
+The user is an Administrator (Admin). As an Administrator, their primary tasks are:
+1. Reviewing the immutable audit ledger.
+2. Resetting the sandbox environment to default seed data for testing.
+
+Guide them to these sub-pages/features:
+- [Audit Trail](/dashboard/audit) to inspect activity logs.
+- [Settings](/dashboard/settings) to reset sandbox database state.
+`;
+    }
+
+    const systemPrompt = `
+You are Archie, the helpful AI Architecture Copilot for this enterprise SaaS ERP platform (ArchStudio).
+Your purpose is to guide users to navigate the system and show them where and how to submit items based on their current role.
+
+CurrentUser Name: ${userName || 'User'}
+CurrentUser Role: ${role || 'junior'}
+
+Role Guidance:
+${roleSpecificGuide}
+
+Important Navigation Paths (ALWAYS use exact markdown links. These are translated by the frontend router):
+- [Dashboard](/dashboard)
+- [Projects Ledger](/dashboard/projects)
+- [Task Board](/dashboard/tasks)
+- [Crews & Workloads](/dashboard/teams)
+- [Audit Trail](/dashboard/audit)
+- [Settings](/dashboard/settings)
+- To enter a project workspace, they should click "Enter Workspace" on a drawing, which routes to /dashboard/workspace/[drawing_id].
+- To view project details, they click on a project, routing to /dashboard/projects/[project_id].
+
+Instructions:
+1. Keep your replies concise and conversational.
+2. Provide direct nav link guidance using the exact markdown format above (e.g. [Projects Ledger](/dashboard/projects)).
+3. Be role-aware: frame tasks and capabilities according to the user's role.
+4. If they ask about files/actions not present in their role, guide them appropriately (e.g. Juniors cannot approve/sign-off drawings, they submit them for review).
+`;
+
+    // Map history to Groq format (role: system/user/assistant)
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history.map(h => ({
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: h.content
+      })),
+      { role: 'user', content: message }
+    ];
+
+    let assistantMessage = '';
+
+    // Try Groq first
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages,
+          temperature: 0.2,
+          max_tokens: 800
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        assistantMessage = data.choices?.[0]?.message?.content || '';
+      } else {
+        const errText = await response.text();
+        console.warn('[AI Assistant] Groq API Call failed. Error details:', errText);
+      }
+    } catch (err) {
+      console.warn('[AI Assistant] Groq API Call threw error:', err);
+    }
+
+    // Fall back to Gemini if Groq failed
+    if (!assistantMessage) {
+      console.log('[AI Assistant] Falling back to Gemini API...');
+      const genAI = getGeminiClient();
+      if (!genAI) {
+        return res.status(500).json({ error: 'No active AI key found (Groq and Gemini both failed/missing)' });
+      }
+
+      // Use the standard flash model
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      // Format messages for Gemini API
+      const chatContent = [];
+      
+      // Gemini expects alternating user/model roles and does not accept system roles in contents list
+      history.forEach(h => {
+        chatContent.push({
+          role: h.role === 'user' ? 'user' : 'model',
+          parts: [{ text: h.content }]
+        });
+      });
+      
+      chatContent.push({
+        role: 'user',
+        parts: [{ text: message }]
+      });
+
+      const result = await model.generateContent({
+        contents: chatContent,
+        systemInstruction: systemPrompt,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 800
+        }
+      });
+
+      assistantMessage = result.response.text() || 'Sorry, I couldn\'t process that request.';
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: assistantMessage
+    });
+  } catch (err) {
+    next(err);
+  }
+};

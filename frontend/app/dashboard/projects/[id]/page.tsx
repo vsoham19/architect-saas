@@ -250,6 +250,7 @@ export default function ProjectDetailsPage() {
                 { value: 'archived', label: 'Archived' }
               ]}
               className="w-32 text-xs font-bold"
+              variant="green"
             />
             <button
               type="button"
@@ -310,15 +311,15 @@ export default function ProjectDetailsPage() {
                   <div className="h-full bg-primary rounded-full" style={{ width: `${progressPercent}%` }} />
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-3 bg-secondary/40 border border-border/40 rounded-xl">
+                  <div className="p-3 bg-secondary-container/50 border border-secondary-container/70 rounded-xl">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground">Total Drawings</p>
                     <p className="text-lg font-black text-foreground mt-1">{projectDocs.length}</p>
                   </div>
-                  <div className="p-3 bg-secondary/40 border border-border/40 rounded-xl">
+                  <div className="p-3 bg-secondary-container/50 border border-secondary-container/70 rounded-xl">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground">Team Size</p>
                     <p className="text-lg font-black text-foreground mt-1">{projectMembers.length}</p>
                   </div>
-                  <div className="p-3 bg-secondary/40 border border-border/40 rounded-xl">
+                  <div className="p-3 bg-secondary-container/50 border border-secondary-container/70 rounded-xl">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground">Pending Reviews</p>
                     <p className="text-lg font-black text-amber-500 mt-1">
                       {projectDocs.filter(d => d.status !== 'approved').length}
@@ -403,7 +404,7 @@ export default function ProjectDetailsPage() {
               </div>
               <button
                 onClick={() => setShowDocModal(true)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-secondary hover:bg-secondary/80 font-bold transition-all text-xs cursor-pointer text-foreground"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-white hover:bg-slate-50 font-bold transition-all text-xs cursor-pointer text-foreground shadow-xs"
               >
                 <Upload size={14} />
                 Upload New Drawing
@@ -541,7 +542,7 @@ export default function ProjectDetailsPage() {
               {(currentRole === 'principal' || currentRole === 'admin') && (
                 <button
                   onClick={() => setShowTeamModal(true)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-secondary hover:bg-secondary/80 font-bold transition-all text-xs cursor-pointer text-foreground"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-white hover:bg-slate-50 font-bold transition-all text-xs cursor-pointer text-foreground shadow-xs"
                 >
                   <Edit size={14} />
                   Adjust Crew Assignments
@@ -631,7 +632,7 @@ export default function ProjectDetailsPage() {
                       <button
                         type="button"
                         onClick={() => setVisibleLogsCount(prev => prev + 10)}
-                        className="px-4 py-2 border border-border bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
+                        className="px-4 py-2 border border-border bg-white hover:bg-slate-50 text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
                       >
                         <ChevronDown size={14} className="text-muted-foreground" />
                         Load More Activities

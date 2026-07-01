@@ -16,7 +16,7 @@ interface CustomSelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'badge';
+  variant?: 'default' | 'badge' | 'green';
 }
 
 const getStatusBadgeClass = (val: string) => {
@@ -25,7 +25,7 @@ const getStatusBadgeClass = (val: string) => {
     case 'pending': return 'bg-[#a25a48] text-white border-transparent hover:bg-[#a25a48]/90';
     case 'blocked': return 'bg-rose-600 text-white border-transparent hover:bg-rose-600/90';
     case 'completed': return 'bg-primary text-white border-transparent hover:bg-primary/90';
-    case 'review': return 'bg-[#475569] text-white border-transparent hover:bg-[#475569]/90';
+    case 'review': return 'bg-[#51736e] text-white border-transparent hover:bg-[#51736e]/90';
     default: return 'bg-secondary text-foreground border-border hover:bg-secondary/80';
   }
 };
@@ -63,13 +63,15 @@ export default function CustomSelect({
         className={
           variant === 'badge'
             ? `flex items-center justify-between gap-1 rounded-lg px-2 py-1 text-[9px] font-bold cursor-pointer outline-none border transition-all select-none disabled:opacity-55 disabled:cursor-not-allowed ${getStatusBadgeClass(value)}`
-            : "w-full flex items-center justify-between bg-secondary border border-border rounded-xl px-3 py-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer transition-all select-none disabled:opacity-55 disabled:cursor-not-allowed"
+            : variant === 'green'
+            ? "w-full flex items-center justify-between bg-primary text-primary-foreground border border-primary/20 rounded-xl px-3.5 py-2 text-[11px] font-bold hover:bg-primary/95 cursor-pointer transition-all select-none disabled:opacity-55 disabled:cursor-not-allowed shadow-sm"
+            : "w-full flex items-center justify-between bg-white border border-border rounded-xl px-3 py-2 text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer transition-all select-none disabled:opacity-55 disabled:cursor-not-allowed hover:bg-slate-50/50"
         }
       >
-        <span className={variant === 'badge' ? '' : selectedOption ? 'text-foreground' : 'text-muted-foreground/60'}>
+        <span className={variant === 'badge' ? '' : variant === 'green' ? 'text-primary-foreground' : selectedOption ? 'text-foreground' : 'text-muted-foreground/60'}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <ChevronDown size={variant === 'badge' ? 9 : 13} className={variant === 'badge' ? 'text-white/80 shrink-0' : 'text-muted-foreground shrink-0'} />
+        <ChevronDown size={variant === 'badge' ? 9 : 13} className={variant === 'badge' ? 'text-white/80 shrink-0' : variant === 'green' ? 'text-primary-foreground shrink-0' : 'text-muted-foreground shrink-0'} />
       </button>
 
       <AnimatePresence>
@@ -98,7 +100,7 @@ export default function CustomSelect({
                       ? 'px-2 py-1 text-[9px] font-bold rounded-lg'
                       : 'px-2.5 py-1.5 text-[11px] font-semibold rounded-lg'
                   } ${
-                    isSelected ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-secondary text-foreground'
+                    isSelected ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-surface-container-high hover:text-on-surface text-foreground'
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
@@ -108,7 +110,7 @@ export default function CustomSelect({
                         opt.value === 'pending' ? 'bg-[#a25a48]' :
                         opt.value === 'blocked' ? 'bg-rose-500' :
                         opt.value === 'completed' ? 'bg-primary' :
-                        opt.value === 'review' ? 'bg-[#475569]' :
+                        opt.value === 'review' ? 'bg-[#51736e]' :
                         'bg-secondary'
                       }`} />
                     )}

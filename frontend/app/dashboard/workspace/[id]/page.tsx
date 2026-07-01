@@ -528,19 +528,8 @@ export default function DocumentWorkspacePage() {
   const approval = activeVersion ? useDBStore.getState().documentApprovals.find(a => a.document_version_id === activeVersion.id) : null;
   const approverUser = approval ? useAuthStore.getState().allUsers.find(u => u.id === approval.approver_id) : null;
 
-  if (!doc) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="h-14 w-14 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
-          <AlertCircle className="text-destructive" size={24} />
-        </div>
-        <p className="text-sm font-semibold text-muted-foreground font-mono">Document workspace not found.</p>
-      </div>
-    );
-  }
-
-  const proj = projects.find(p => p.id === doc.project_id);
-  const projTasks = tasks.filter(t => t.project_id === doc.project_id);
+  const proj = doc ? projects.find(p => p.id === doc.project_id) : undefined;
+  const projTasks = doc ? tasks.filter(t => t.project_id === doc.project_id) : [];
 
   useEffect(() => {
     if (activeVersion) {
@@ -553,6 +542,17 @@ export default function DocumentWorkspacePage() {
       setTempPlotArea(proj.plot_area?.toString() || '10000');
     }
   }, [proj?.id, proj?.plot_area]);
+
+  if (!doc) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <div className="h-14 w-14 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+          <AlertCircle className="text-destructive" size={24} />
+        </div>
+        <p className="text-sm font-semibold text-muted-foreground font-mono">Document workspace not found.</p>
+      </div>
+    );
+  }
 
   const handleContainerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isDraggingSlider) {
